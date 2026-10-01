@@ -34,7 +34,7 @@ The rest of the store listing (description, keywords, review information) lives 
 - Trends has a Temperature card. It draws every reading in the period as a curve, with your fever line dashed across it and a colored mark at each dose.
 - Temperatures show one decimal in your phone's unit, °F or °C, and you can change it in Settings → Sick mode. Two phones on one server can use different units and both read every temperature correctly.
 - A timer can start earlier than now. Pick a time, or tap −5, −15 or −30 min. On the Stop sheet you can correct the start time, or restart the timer if needed.
-- Custom authorization headers, for a server behind an access gate such as Cloudflare Access or an nginx shared secret. Tap Advanced configuration when you sign in. If Cloudflare Access answers instead of Baby Buddy, the app automatically detects it and opens the header section for you.
+- Custom authorization headers, for a server behind an access gate such as Cloudflare Access or an nginx shared secret. Tap Advanced configuration when you sign in (experimental).
 
 #Improved
 - Stop now stops the timer the moment you tap it, on your phone and on the server. Before, the clock kept running until you saved the record. If you tap Stop by mistake, "Resume timer" carries on from the original start.
@@ -53,7 +53,7 @@ The rest of the store listing (description, keywords, review information) lives 
 - new | Fever chart in Trends | Every temperature as a curve, with a mark at each medication dose.
 - timer | Start a timer earlier | Pick a start time or tap -15 min. Fix it on the Stop sheet too.
 - timer | Stop means stopped | The timer stops when you tap Stop, not when you save.
-- guard | Cloudflare Access support | Reach a server behind Cloudflare Access or another header gate.
+- guard | Cloudflare Access support | Reach a server behind Cloudflare Access or another header gate (experimental).
 #Fixed
 - A logged timer keeps the End you set
 - Editing an unsynced timer record no longer revives the timer
