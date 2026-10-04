@@ -4,7 +4,8 @@ import AppIntents
 /// start a timer, finish a feed on a side. The intents are the ones the widget buttons run, so
 /// "Hey Siri, log a wet diaper in Baby Buddy" logs exactly what a Quick Log tap would.
 ///
-/// App target only: an app declares one provider, and the widget extension must not.
+/// App target only: an app declares one provider, and the widget extension must not. Xcode reads
+/// these at build time, so the symbol names are literals (the same ones ``EntityKind`` uses).
 struct BabyBuddyShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -15,7 +16,7 @@ struct BabyBuddyShortcuts: AppShortcutsProvider {
                 "Log a diaper in \(.applicationName)",
             ],
             shortTitle: "Log diaper",
-            systemImageName: EntityKind.change.systemImage)
+            systemImageName: "arrow.triangle.2.circlepath")
         AppShortcut(
             intent: StartTimerIntent(),
             phrases: [
@@ -33,6 +34,6 @@ struct BabyBuddyShortcuts: AppShortcutsProvider {
                 "Finish feeding in \(.applicationName)",
             ],
             shortTitle: "Finish feed",
-            systemImageName: TimerActivity.feeding.systemImage)
+            systemImageName: "drop.fill")
     }
 }

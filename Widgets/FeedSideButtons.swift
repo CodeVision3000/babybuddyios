@@ -33,8 +33,10 @@ struct FeedSideButtons: View {
                 .padding(.vertical, 4)
                 .background(.quaternary, in: Capsule())
         } else {
-            Text(side.shortTitle)
+            Text(side.title)
                 .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
                 .background(BBColor.stop, in: RoundedRectangle(cornerRadius: 9))
