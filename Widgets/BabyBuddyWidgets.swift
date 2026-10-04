@@ -10,5 +10,11 @@ struct BabyBuddyWidgets: WidgetBundle {
         ActiveTimerWidget()
         StatusWidget()
         RunningTimerLiveActivity()
+        // The deployment target is iOS 17; controls arrived in 18.
+        if #available(iOS 18.0, *) {
+            DiaperControl()
+            StartFeedControl()
+            FinishFeedControl()
+        }
     }
 }

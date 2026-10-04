@@ -214,6 +214,7 @@ struct DashboardView: View {
             }) { timer in
                 StopTimerSheet(timer: timer,
                                onLog: { kind in stopTimer(timer, as: kind) },
+                               onLogFeed: { side in logFeed(timer, side: side) },
                                onResume: { resumeTimer(timer); stoppingTimer = nil },
                                onDiscard: { discardTimer(timer); stoppingTimer = nil })
             }
@@ -713,6 +714,15 @@ struct DashboardView: View {
         Analytics.timerStopped(activity: activity, source: .app)
         Task { await sync.sync() }
         Task { await liveActivity.reconcile() } // end the Live Activity for the stopped timer
+        stoppingTimer = nil
+    }
+
+    /// File a stopped feeding timer as a breastfeed on `side`, with no editor.
+    private func logFeed(_ timer: LocalEntity, side: FeedSide) {
+        LocalRepository(context: context).finishFeeding(timer, side: side)
+        Analytics.timerStopped(activity: TimerActivity.feeding.rawValue, source: .app)
+        Task { await sync.sync() }
+        Task { await liveActivity.reconcile() }
         stoppingTimer = nil
     }
 

@@ -4,8 +4,8 @@ import SwiftData
 import AppIntents
 
 /// The most-recent running timer with live-ticking elapsed time. On the Home screen it offers a
-/// one-tap Stop button and tap-to-open actions; the Lock Screen / StandBy accessories are
-/// glanceable and tap-to-open only (accessory widgets can't host interactive buttons).
+/// one-tap Stop button (Left / Right / Both for a feed) and tap-to-open actions. On the Lock Screen
+/// the rectangular size carries the side buttons for a feed; the rest are glanceable and open the app.
 struct ActiveTimerWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BabyBuddyActiveTimer", provider: ActiveTimerProvider()) { entry in
@@ -50,8 +50,9 @@ struct ActiveTimerProvider: TimelineProvider {
                             policy: .never))
     }
 
-    /// The most-recent running timer in the shared store, or `nil` if none is running.
-    static func currentTimer() -> TimerSnapshot? {
+    /// The most-recent running timer in the shared store, or `nil` if none is running. With an
+    /// `activity`, the most recent running timer of that activity.
+    static func currentTimer(activity: TimerActivity? = nil) -> TimerSnapshot? {
         guard let container = try? ModelContainer(
             for: LocalStore.schema,
             configurations: ModelConfiguration(schema: LocalStore.schema, url: LocalStore.storeURL))
@@ -61,7 +62,9 @@ struct ActiveTimerProvider: TimelineProvider {
             predicate: #Predicate { $0.kindRaw == "timer" },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)])
         guard let timers = try? context.fetch(descriptor),
-              let timer = timers.first(where: \.isRunningTimer)
+              let timer = timers.first(where: {
+                  $0.isRunningTimer && (activity == nil || TimerActivity(timer: $0) == activity)
+              })
         else { return nil }
         let name = (timer.payloadObject["name"] as? String) ?? "Timer"
         return TimerSnapshot(localID: timer.localID.uuidString, name: name, start: timer.timestamp,
@@ -83,10 +86,24 @@ struct ActiveTimerView: View {
         }
     }
 
-    // MARK: Lock Screen / StandBy accessories (tap-to-open; no interactive buttons)
+    // MARK: Lock Screen / StandBy accessories (tap-to-open, plus side buttons for a feed)
 
     @ViewBuilder private var rectangular: some View {
-        if let timer = entry.timer {
+        if let timer = entry.timer, timer.activity == .feeding {
+            // A feed finishes from here: the label and count share a line to leave room for the sides.
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Image(systemName: timer.activity?.systemImage ?? "timer")
+                    Text(timer.start, style: .timer)
+                        .monospacedDigit()
+                }
+                .font(.headline)
+                .widgetAccentable()
+                FeedSideButtons(timerLocalID: timer.localID, compact: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .widgetURL(timerURL(timer))
+        } else if let timer = entry.timer {
             VStack(alignment: .leading, spacing: 2) {
                 Label(timer.name, systemImage: timer.activity?.systemImage ?? "timer")
                     .font(.headline)
@@ -175,15 +192,17 @@ struct ActiveTimerView: View {
         .widgetURL(URL(string: "babybuddy://timer/\(timer.localID)"))
     }
 
-    /// Stop logs the activity. Sleep/tummy time record in one tap (background intent);
-    /// feeding/pumping need extra fields, so they open a pre-filled in-app form via a deep
-    /// link; an unrecognized timer name opens the generic timer actions.
+    /// Stop logs the activity. Sleep/tummy time record in one tap (background intent); a feed
+    /// gets one button per side; pumping needs an amount, so it opens a pre-filled in-app form via
+    /// a deep link; an unrecognized timer name opens the generic timer actions.
     @ViewBuilder private func stopControl(_ timer: TimerSnapshot) -> some View {
         let route = TimerStopRoute.resolve(localID: timer.localID, activity: timer.activity)
         switch route {
         case .log(let id):
             Button(intent: LogTimerIntent(timerLocalID: id)) { stopLabel }
                 .buttonStyle(.plain)
+        case .feedSide(let id):
+            FeedSideButtons(timerLocalID: id)
         case .convertForm, .openActions:
             Link(destination: route.deepLink!) { stopLabel }
         }

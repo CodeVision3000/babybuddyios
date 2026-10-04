@@ -5,7 +5,8 @@ import SwiftData
 /// lets you confirm or change the type. The timer stopped when Stop was tapped, so closing the
 /// sheet leaves it stopped; "Resume timer" undoes that. Logging, resuming and discarding are handed
 /// back to the caller (the dashboard owns the cache writes + sync); for feeding/pumping the caller
-/// routes to the pre-filled detail editor, which needs extra fields.
+/// routes to the pre-filled detail editor, which needs extra fields. A breastfeed skips the editor:
+/// Left / Right / Both log it on that side in one tap.
 /// The Started time is a picker, and "Restart from now" resumes from zero, for a timer started
 /// late or by mistake (#72).
 struct StopTimerSheet: View {
@@ -14,6 +15,7 @@ struct StopTimerSheet: View {
 
     let timer: LocalEntity
     let onLog: (EntityKind) -> Void
+    let onLogFeed: (FeedSide) -> Void
     let onResume: () -> Void
     let onDiscard: () -> Void
 
@@ -23,10 +25,12 @@ struct StopTimerSheet: View {
     private let activities: [EntityKind] = [.feeding, .sleep, .tummyTime, .pumping]
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
-    init(timer: LocalEntity, onLog: @escaping (EntityKind) -> Void, onResume: @escaping () -> Void,
+    init(timer: LocalEntity, onLog: @escaping (EntityKind) -> Void,
+         onLogFeed: @escaping (FeedSide) -> Void, onResume: @escaping () -> Void,
          onDiscard: @escaping () -> Void) {
         self.timer = timer
         self.onLog = onLog
+        self.onLogFeed = onLogFeed
         self.onResume = onResume
         self.onDiscard = onDiscard
         _selected = State(initialValue: TimerActivity(timer: timer)?.convertKind)
@@ -115,6 +119,7 @@ struct StopTimerSheet: View {
 
     private var actions: some View {
         VStack(spacing: 8) {
+            if selected == .feeding { feedSides }
             Button { if let selected { onLog(selected) } } label: { Text(logTitle) }
                 .buttonStyle(logStyle)
                 .disabled(selected == nil)
@@ -139,6 +144,25 @@ struct StopTimerSheet: View {
         .padding(.top, 10)
         .padding(.bottom, 6)
         .background(BBColor.surface)
+    }
+
+    /// One tap per side for a breastfeed; "Log feeding…" below stays for a bottle or an amount.
+    private var feedSides: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("Which side?").font(.subheadline.weight(.medium))
+                Spacer()
+                if let last = SharedDefaults.lastFeedSide {
+                    Text("Last: \(last.title)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            HStack(spacing: 8) {
+                ForEach(FeedSide.allCases, id: \.self) { side in
+                    Button(side.title) { onLogFeed(side) }
+                        .buttonStyle(logStyle)
+                }
+            }
+        }
     }
 
     private var logTitle: String {

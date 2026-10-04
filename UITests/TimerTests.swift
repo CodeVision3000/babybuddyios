@@ -20,6 +20,35 @@ final class TimerTests: UITestCase {
         XCTAssertFalse(app.buttons["Stop"].exists)
     }
 
+    /// A breastfeed needs only its side: tapping it logs the feed with no editor, and the next
+    /// feed's Stop sheet remembers that side so parents can switch.
+    func testStopFeedingTimerLogsSideInOneTap() {
+        launch(["BB_TOAST_SECONDS": "30"])
+        tap(app.buttons["Stop"])
+        expect(app.navigationBars["Stop Timer"])
+        tap(app.buttons["Feeding"])
+        expect(app.staticTexts["Which side?"])
+        XCTAssertFalse(app.staticTexts.labeled("Last: ").exists, "No side has been logged yet")
+
+        tap(app.buttons["Right"])
+        expectGone(app.navigationBars["Stop Timer"])
+        XCTAssertFalse(app.navigationBars["Convert to Feeding"].exists, "A side logs without the editor")
+        expect(app.otherElements["Logged Feeding"])
+        expect(app.buttons.labeled("Start a timer"))
+
+        // The next feed: started from the dashboard, its Stop sheet offers the other side.
+        let startSheet = app.navigationBars["Start Timer"]
+        tap(app.buttons["Add"])
+        tap(app.buttons["Start timer"])
+        expect(startSheet)
+        tap(app.buttons["Feeding"])
+        tap(app.buttons["Start feeding timer"])
+        expectGone(startSheet)
+        tap(app.buttons["Stop"])
+        expect(app.staticTexts["Which side?"])
+        expect(app.staticTexts["Last: Right"])
+    }
+
     func testStopTimerOneTapLogAndDiscard() {
         launch(["BB_TOAST_SECONDS": "30"])
         let tummy = expect(element(labeled: "Tummy time, "))
