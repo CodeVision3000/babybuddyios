@@ -6,7 +6,7 @@ import XCTest
 /// None of this needs a signed build — the app requests the activity in-process, the banner renders
 /// from activity state (`Widgets/RunningTimerLiveActivity.swift`), and its Stop button is a
 /// `LiveActivityIntent` that runs in the app. SpringBoard exposes the banner as
-/// `activity-content-view`, with the header, the elapsed time and Stop inside it.
+/// `activity-content-view`, with the header, the elapsed time and Stop (or a feed's sides) inside it.
 final class LiveActivityTests: UITestCase {
     /// Regression: #41 / #53 — Stop on the banner has to both file the record and take the banner
     /// away. An earlier build left it on screen for a timer that no longer existed.
@@ -67,10 +67,12 @@ final class LiveActivityTests: UITestCase {
         expect(liveActivity, timeout: bannerTimeout)
     }
 
-    /// A feeding can't be filed from a single tap — it needs a type and a method — so Stop on the
-    /// banner is a `Link` into the pre-filled convert form instead of an intent (#19 #41).
-    func testStopOnAFeedingTimerOpensTheConvertForm() {
-        launch()
+    /// A breastfeed needs only its side, so a feeding's banner offers Left / Right / Both in place of
+    /// Stop, and each one files the feed without opening the app or the convert form.
+    func testSideOnAFeedingTimerLogsItWithoutTheApp() {
+        launch(["BB_TOAST_SECONDS": "30"])
+        let feedingsToday = expect(element(labeled: "Feedings, "))
+        let before = feedingsToday.label
         tap(app.buttons["Add"])
         tap(app.buttons["Start timer"])
         tap(app.buttons["Feeding"])
@@ -81,13 +83,15 @@ final class LiveActivityTests: UITestCase {
         // The newest running timer is the one with the banner — the feeding just started.
         let activity = expect(liveActivity, timeout: bannerTimeout)
         XCTAssertTrue(activity.staticTexts["Maya · Feeding"].exists)
-        tap(activity.buttons["Stop"])
+        XCTAssertFalse(activity.buttons["Stop"].exists, "A feed finishes by side, not Stop")
+        tap(activity.buttons["Finish feeding on left"])
 
+        // Not asserting the banner goes: the seeded tummy timer still runs, and can take it over.
         returnToApp()
-        let editor = expect(app.navigationBars["Convert to Feeding"])
-        tap(editor.buttons["Save"])
-        expectGone(editor)
+        expectGone(element(labeled: "Feeding running"))
+        XCTAssertFalse(app.navigationBars["Convert to Feeding"].exists, "A side logs without the form")
         expect(element(labeled: "Tummy time running")) // the seeded timer keeps running
+        XCTAssertNotEqual(feedingsToday.label, before, "The feed should count toward today")
     }
 
     // MARK: Helpers
