@@ -68,12 +68,48 @@ final class LiveActivityTests: UITestCase {
     }
 
     /// A feed is timed one side at a time, so its banner offers "Switch to right" and "Done" in
-    /// place of Stop. Switching logs the left side and moves the banner to the right; Done logs
-    /// that. Neither opens the app or a form.
-    func testFeedSidesFromTheLiveActivity() {
+    /// place of Stop. Done logs the side from the banner, without opening the app or a form.
+    func testDoneOnAFeedFromTheLiveActivity() {
+        let feedingsToday = startLeftFeedAndShowBanner()
+        let before = feedingsToday.label
+        let activity = liveActivity
+        XCTAssertFalse(activity.buttons["Stop"].exists, "A feed finishes by side, not Stop")
+
+        // SpringBoard may expose a button by its accessibility label or by its visible text.
+        tap(activity.buttons.matching(
+            NSPredicate(format: "label == 'Done feeding' OR label == 'Done'")).firstMatch)
+        // The intent ran when its feed leaves the banner. Not the whole banner: the seeded tummy
+        // timer still runs, and can take it over.
+        expectGone(activity.staticTexts["Maya · Feeding · Left"], timeout: bannerTimeout)
+        returnToApp()
+        expectGone(element(labeled: "Feeding · Left running"))
+        XCTAssertFalse(app.navigationBars["Convert to Feeding"].exists, "A side logs without the form")
+        expect(element(labeled: "Tummy time running")) // the seeded timer keeps running
+        XCTAssertNotEqual(feedingsToday.label, before, "The feed should count toward today")
+    }
+
+    /// Switch on the banner logs the left side and starts the right one, from the banner. Checked
+    /// in the app: whether a banner for the right side appears from the background is up to
+    /// ActivityKit, and the app's next foreground puts it up regardless.
+    func testSwitchOnAFeedFromTheLiveActivity() {
+        let feedingsToday = startLeftFeedAndShowBanner()
+        let before = feedingsToday.label
+        let activity = liveActivity
+
+        tap(activity.buttons.matching(
+            NSPredicate(format: "label == 'Switch to right side' OR label == 'Switch to Right'")).firstMatch)
+        expectGone(activity.staticTexts["Maya · Feeding · Left"], timeout: bannerTimeout)
+        returnToApp()
+        expect(element(labeled: "Feeding · Right running"))
+        XCTAssertFalse(element(labeled: "Feeding · Left running").exists, "Switching logs the left side")
+        XCTAssertNotEqual(feedingsToday.label, before, "The left side should count toward today")
+    }
+
+    /// Starts a feed on the left in the app and pulls down Notification Center, where its banner
+    /// shows. Returns today's Feedings tile, read before anything is logged.
+    private func startLeftFeedAndShowBanner() -> XCUIElement {
         launch(["BB_TOAST_SECONDS": "30"])
         let feedingsToday = expect(element(labeled: "Feedings, "))
-        let before = feedingsToday.label
         tap(app.buttons["Add"])
         tap(app.buttons["Start timer"])
         tap(app.buttons["Feeding"])
@@ -84,23 +120,7 @@ final class LiveActivityTests: UITestCase {
         // The newest running timer is the one with the banner — the feeding just started.
         let activity = expect(liveActivity, timeout: bannerTimeout)
         XCTAssertTrue(activity.staticTexts["Maya · Feeding · Left"].exists)
-        XCTAssertFalse(activity.buttons["Stop"].exists, "A feed finishes by side, not Stop")
-
-        // SpringBoard may expose a button by its accessibility label or by its visible text.
-        tap(activity.buttons.matching(
-            NSPredicate(format: "label == 'Switch to right side' OR label == 'Switch to Right'")).firstMatch)
-        expect(activity.staticTexts["Maya · Feeding · Right"], timeout: bannerTimeout)
-
-        tap(activity.buttons.matching(
-            NSPredicate(format: "label == 'Done feeding' OR label == 'Done'")).firstMatch)
-        // Wait for the feed to leave the banner before going back, so the intent has finished. Not
-        // the whole banner: the seeded tummy timer still runs, and can take it over.
-        expectGone(activity.staticTexts["Maya · Feeding · Right"], timeout: bannerTimeout)
-        returnToApp()
-        expectGone(element(labeled: "Feeding · Right running"))
-        XCTAssertFalse(app.navigationBars["Convert to Feeding"].exists, "A side logs without the form")
-        expect(element(labeled: "Tummy time running")) // the seeded timer keeps running
-        XCTAssertNotEqual(feedingsToday.label, before, "The feed should count toward today")
+        return feedingsToday
     }
 
     // MARK: Helpers
