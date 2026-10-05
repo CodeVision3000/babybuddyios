@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 /// Left / Right / Both for a running feed: each tap logs it on that side via
-/// ``FinishFeedingIntent``, no app launch. The feed's Stop control on the Active Timer widget, the
+/// ``FinishFeedTimerIntent``, no app launch. The feed's Stop control on the Active Timer widget, the
 /// Live Activity and the Quick Start Lock Screen widget, so all of them finish a feed the same way.
 ///
 /// `compact` is for the Lock Screen and the Dynamic Island: one-letter labels and the system's
@@ -16,7 +16,7 @@ struct FeedSideButtons: View {
     var body: some View {
         HStack(spacing: compact ? 4 : 5) {
             ForEach(FeedSide.allCases, id: \.self) { side in
-                Button(intent: FinishFeedingIntent(side: side, timerLocalID: timerLocalID)) {
+                Button(intent: FinishFeedTimerIntent(side: side, timerLocalID: timerLocalID)) {
                     label(side)
                 }
                 .buttonStyle(.plain)

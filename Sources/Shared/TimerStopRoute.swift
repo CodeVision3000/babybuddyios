@@ -4,13 +4,13 @@ import Foundation
 /// the Active Timer widget and the Live Activity so both route identically:
 ///
 /// - sleep / tummy time (`isInstantLoggable`) → log in one tap via `LogTimerIntent`
-/// - feeding → one button per side via `FinishFeedingIntent` (the side is all a breastfeed needs)
+/// - feeding → one button per side via `FinishFeedTimerIntent` (the side is all a breastfeed needs)
 /// - pumping → open a pre-filled convert form (needs an amount)
 /// - uncategorized / custom timer → open the Stop sheet to pick a type
 enum TimerStopRoute: Equatable {
     /// Instant-loggable: record via `LogTimerIntent(timerLocalID:)` in one tap (no app launch).
     case log(localID: String)
-    /// A feed: Left / Right / Both buttons, each logging it via `FinishFeedingIntent` (no app launch).
+    /// A feed: Left / Right / Both buttons, each logging it via `FinishFeedTimerIntent` (no app launch).
     case feedSide(localID: String)
     /// Needs extra fields: open the pre-filled convert form via a `babybuddy://convert` deep link.
     case convertForm(localID: String, kind: EntityKind)
