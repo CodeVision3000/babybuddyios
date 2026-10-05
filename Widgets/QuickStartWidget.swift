@@ -6,7 +6,7 @@ import AppIntents
 /// one tap, via ``StartTimerIntent``. Static content — it looks the same whether or not a
 /// timer is running, so it's always useful.
 ///
-/// The feeding tile starts the side due next. The Lock Screen rectangle offers Feed Left / Feed
+/// The feeding tile starts (or switches to) the side due next. The Lock Screen rectangle offers Feed Left / Feed
 /// Right / Sleep, and while a feed runs, Switch / Done instead, so one Lock Screen widget runs a
 /// whole feed.
 struct QuickStartWidget: Widget {
@@ -134,21 +134,13 @@ struct QuickStartView: View {
         }
     }
 
-    /// A feed starts on the side due next ("Feeding · R"), so the tile alternates sides on its own.
-    @ViewBuilder private func tile(_ activity: TimerActivity) -> some View {
-        if activity == .feeding {
-            let side = FeedSide.suggestedNext
-            Button(intent: StartFeedSideIntent(side: side)) {
-                tileLabel(activity, title: "\(activity.timerName) · \(side.shortTitle)")
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Start feeding on the \(side.title.lowercased())")
-        } else {
-            Button(intent: StartTimerIntent(activity: activity)) {
-                tileLabel(activity, title: activity.timerName)
-            }
-            .buttonStyle(.plain)
+    /// The feeding tile starts the side due next, decided when tapped (``StartTimerIntent``): the
+    /// other side from one running, else from the last one logged. So one tile switches sides too.
+    private func tile(_ activity: TimerActivity) -> some View {
+        Button(intent: StartTimerIntent(activity: activity)) {
+            tileLabel(activity, title: activity.timerName)
         }
+        .buttonStyle(.plain)
     }
 
     private func tileLabel(_ activity: TimerActivity, title: String) -> some View {

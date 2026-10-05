@@ -33,7 +33,7 @@ struct StartFeedSideIntent: LiveActivityIntent {
         let context = try FeedFinisher.context()
         var change = LocalRepository(context: context).autoCloseFeeds()
         let started = LocalRepository(context: context).startFeedSide(
-            side == .both ? .left : side, childID: SharedDefaults.selectedChildID)
+            side == .both ? .left : side, childID: SharedDefaults.validChildID)
         change.closed += started.closed
         change.started = started.started
         if started.started != nil { Analytics.timerStarted(activity: TimerActivity.feeding.rawValue, source: .widget) }
@@ -63,11 +63,17 @@ struct SwitchFeedSideIntent: LiveActivityIntent {
         Analytics.widgetIntent("SwitchFeedSide")
         let context = try FeedFinisher.context()
         let repo = LocalRepository(context: context)
-        var change = repo.autoCloseFeeds()
+        // Read the timer before closing anything: a side switched at or past the hour closes
+        // itself first, and the next side must still start.
+        var next: (side: FeedSide, child: Int?)?
         if let id = UUID(uuidString: timerLocalID),
            let timer = LocalStore.fetch(localID: id, in: context),
            timer.isRunningTimer {
-            let started = repo.startFeedSide((timer.feedSide ?? .right).other, childID: timer.childID)
+            next = ((timer.feedSide ?? .right).other, timer.childID)
+        }
+        var change = repo.autoCloseFeeds()
+        if let next {
+            let started = repo.startFeedSide(next.side, childID: next.child)
             change.closed += started.closed
             change.started = started.started
         }
@@ -92,7 +98,7 @@ struct FinishFeedingIntent: LiveActivityIntent {
         let repo = LocalRepository(context: context)
         var change = repo.autoCloseFeeds()
         guard let timer = LocalRepository.runningFeedTimer(
-            childID: SharedDefaults.selectedChildID, in: context)
+            childID: SharedDefaults.validChildID, in: context)
         else {
             await FeedFinisher.apply(change, in: context)
             // A feed that just closed itself still counts as finished; otherwise there was none.

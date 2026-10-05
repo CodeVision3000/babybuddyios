@@ -300,7 +300,11 @@ final class LocalAlerts {
             return first.flatMap { $0.isEmpty ? nil : $0 }
         }
         let running = fetch("timer").filter(\.isRunningTimer)
-        let timers = running.map {
+        // A side closes itself at the hour, with its own notice; a "still running" nudge set later
+        // than that would arrive for a feed already logged.
+        let timers = running.filter {
+            $0.feedSide == nil || ForgottenTimerPolicy.threshold(for: .feeding) < FeedSide.autoCloseAfter
+        }.map {
             ForgottenTimerPolicy.request(for: $0, childName: firstName($0.childID))
         }
         let feeds = running.filter { $0.feedSide != nil }.map {

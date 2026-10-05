@@ -29,7 +29,7 @@ struct StartTimerIntent: AppIntent {
         if activity == .feeding {
             let context = container.mainContext
             var change = LocalRepository(context: context).autoCloseFeeds()
-            let child = SharedDefaults.selectedChildID
+            let child = SharedDefaults.validChildID
             let started = LocalRepository(context: context).startFeedSide(
                 LocalRepository.nextFeedSide(childID: child, in: context), childID: child)
             change.closed += started.closed

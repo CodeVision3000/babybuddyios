@@ -34,6 +34,12 @@ enum SharedDefaults {
         }
     }
 
+    /// ``selectedChildID`` when it names a real child: the Settings picker stores 0 for none, and a
+    /// record sent with child 0 is rejected by the server.
+    static var validChildID: Int? {
+        selectedChildID.flatMap { $0 > 0 ? $0 : nil }
+    }
+
     /// The feeding type/method the Quick Log widget's one-tap "Feeding" tile logs. Edited in the
     /// app's Settings and read here by the widget's App Intent across the process boundary, so a
     /// tap always records the customer's current default. Default to breast milk / both breasts.

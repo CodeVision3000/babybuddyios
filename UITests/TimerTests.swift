@@ -43,7 +43,7 @@ final class TimerTests: UITestCase {
         expect(startSheet)
         tap(app.buttons["Feeding"])
         expect(app.staticTexts["Next: Left"])
-        tap(app.buttons["Cancel"])
+        tap(startSheet.buttons["Cancel"])
         expectGone(startSheet)
     }
 
