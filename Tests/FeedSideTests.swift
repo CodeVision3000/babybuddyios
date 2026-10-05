@@ -305,4 +305,20 @@ final class FeedSideTests: XCTestCase {
         XCTAssertEqual(try feedings().map { $0.payloadObject["method"] as? String }, ["right breast"])
         XCTAssertTrue(try runningTimers().isEmpty)
     }
+
+    func testStartButtonStartsASideAndLogsTheOther() async throws {
+        let hook = FeedFinisher.reconcileLiveActivity
+        FeedFinisher.reconcileLiveActivity = nil
+        let savedChild = SharedDefaults.selectedChildID
+        defer { FeedFinisher.reconcileLiveActivity = hook; SharedDefaults.selectedChildID = savedChild }
+        SharedDefaults.selectedChildID = 1
+        let encoded = FeedButtonAction(.startLeft, timerLocalID: "").encoded
+        XCTAssertEqual(FeedButtonAction(encoded: encoded)?.kind, .startLeft, "An empty id still decodes")
+
+        await FeedButtonAction(.startLeft, timerLocalID: "").perform(in: context)
+        await FeedButtonAction(.startRight, timerLocalID: "").perform(in: context)
+
+        XCTAssertEqual(try feedings().map { $0.payloadObject["method"] as? String }, ["left breast"])
+        XCTAssertEqual(try runningTimers().map(\.feedSide), [.right])
+    }
 }

@@ -86,7 +86,8 @@ struct QuickStartView: View {
                 HStack(spacing: 4) {
                     // A feed starts on a side; the other side then logs it (sides come in pairs).
                     ForEach(FeedSide.timedSides, id: \.self) { side in
-                        Button(intent: StartFeedSideIntent(side: side)) {
+                        Button(intent: LogTimerIntent(timerLocalID: FeedButtonAction(
+                            side == .left ? .startLeft : .startRight, timerLocalID: "").encoded)) {
                             HStack(spacing: 2) {
                                 Image(systemName: TimerActivity.feeding.systemImage)
                                 Text(side.shortTitle)

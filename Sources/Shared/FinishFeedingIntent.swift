@@ -160,7 +160,8 @@ struct FinishFeedTimerIntent: LiveActivityIntent {
 /// that intent is the one the banner reliably runs: separate intent types for these buttons never
 /// ran from the banner in UI tests, while Stop on the same banner always did.
 struct FeedButtonAction: Equatable {
-    enum Kind: String { case `switch`, done, left, right, both }
+    /// `startLeft` / `startRight` start a side (logging the other), and carry no timer id.
+    enum Kind: String { case `switch`, done, left, right, both, startLeft, startRight }
 
     let kind: Kind
     let timerLocalID: String
@@ -173,7 +174,8 @@ struct FeedButtonAction: Equatable {
     }
 
     init?(encoded: String) {
-        let parts = encoded.split(separator: ":", maxSplits: 2).map(String.init)
+        let parts = encoded.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+            .map(String.init)
         guard parts.count == 3, parts[0] == "feed", let kind = Kind(rawValue: parts[1]) else { return nil }
         self.init(kind, timerLocalID: parts[2])
     }
@@ -194,12 +196,19 @@ struct FeedButtonAction: Equatable {
         let child = wasRunning ? timer?.childID : nil
 
         var change = repo.autoCloseFeeds()
-        if wasRunning, let id {
+        if kind == .startLeft || kind == .startRight {
+            let started = repo.startFeedSide(kind == .startLeft ? .left : .right,
+                                             childID: SharedDefaults.validChildID)
+            change.closed += started.closed
+            change.started = started.started
+        } else if wasRunning, let id {
             switch kind {
             case .switch:
                 let started = repo.startFeedSide((side ?? .right).other, childID: child)
                 change.closed += started.closed
                 change.started = started.started
+            case .startLeft, .startRight:
+                break // handled above
             case .done, .left, .right, .both:
                 // Still running unless auto-close just logged it.
                 if let current = LocalStore.fetch(localID: id, in: context), current.isRunningTimer {
