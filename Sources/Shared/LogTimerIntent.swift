@@ -35,6 +35,13 @@ struct LogTimerIntent: LiveActivityIntent {
             configurations: ModelConfiguration(schema: LocalStore.schema, url: LocalStore.storeURL))
         let context = container.mainContext
 
+        // A feed's banner and widget buttons ride this intent too, as "feed:<action>:<timer id>"
+        // (``FeedButtonAction``): it's the one Live Activity intent proven to run from the banner.
+        if let action = FeedButtonAction(encoded: timerLocalID) {
+            await action.perform(in: context)
+            return .result()
+        }
+
         if let id = UUID(uuidString: timerLocalID),
            let timer = LocalStore.fetch(localID: id, in: context),
            let activity = TimerActivity(timer: timer),

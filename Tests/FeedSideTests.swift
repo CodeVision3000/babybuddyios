@@ -267,4 +267,42 @@ final class FeedSideTests: XCTestCase {
         XCTAssertTrue(request.id.hasPrefix("feedclose-"))
         XCTAssertTrue(request.body.contains("Maya's left side"), request.body)
     }
+
+    // MARK: Banner buttons (LogTimerIntent carrying a FeedButtonAction)
+
+    func testFeedButtonActionRoundTrips() {
+        let id = UUID().uuidString
+        let action = FeedButtonAction(.switch, timerLocalID: id)
+        XCTAssertEqual(FeedButtonAction(encoded: action.encoded), action)
+        XCTAssertNil(FeedButtonAction(encoded: id), "A plain timer id is Stop's, not a feed button's")
+        XCTAssertNil(FeedButtonAction(encoded: "feed:nap:\(id)"))
+    }
+
+    func testSwitchButtonLogsTheSideAndStartsTheOther() async throws {
+        let hook = FeedFinisher.reconcileLiveActivity
+        FeedFinisher.reconcileLiveActivity = nil
+        defer { FeedFinisher.reconcileLiveActivity = hook }
+        repo.startFeedSide(.left, childID: 1)
+        let left = try XCTUnwrap(try runningTimers().first)
+
+        await FeedButtonAction(.switch, timerLocalID: left.localID.uuidString).perform(in: context)
+
+        XCTAssertEqual(try feedings().first?.payloadObject["method"] as? String, "left breast")
+        XCTAssertEqual(try runningTimers().map(\.feedSide), [.right])
+    }
+
+    func testDoneButtonLogsItsOwnSide() async throws {
+        let hook = FeedFinisher.reconcileLiveActivity
+        FeedFinisher.reconcileLiveActivity = nil
+        defer { FeedFinisher.reconcileLiveActivity = hook }
+        repo.startFeedSide(.right, childID: 1)
+        let right = try XCTUnwrap(try runningTimers().first)
+
+        await FeedButtonAction(.done, timerLocalID: right.localID.uuidString).perform(in: context)
+        // A second tap (the banner lingering) logs nothing more.
+        await FeedButtonAction(.done, timerLocalID: right.localID.uuidString).perform(in: context)
+
+        XCTAssertEqual(try feedings().map { $0.payloadObject["method"] as? String }, ["right breast"])
+        XCTAssertTrue(try runningTimers().isEmpty)
+    }
 }

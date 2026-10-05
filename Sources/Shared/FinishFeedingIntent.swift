@@ -155,6 +155,63 @@ struct FinishFeedTimerIntent: LiveActivityIntent {
     }
 }
 
+/// A feed button on a widget or the Live Activity: Switch, Done, or a side for a feed that wasn't
+/// started on one. It travels as ``LogTimerIntent``'s timer id, "feed:<action>:<timer id>", because
+/// that intent is the one the banner reliably runs: separate intent types for these buttons never
+/// ran from the banner in UI tests, while Stop on the same banner always did.
+struct FeedButtonAction: Equatable {
+    enum Kind: String { case `switch`, done, left, right, both }
+
+    let kind: Kind
+    let timerLocalID: String
+
+    var encoded: String { "feed:\(kind.rawValue):\(timerLocalID)" }
+
+    init(_ kind: Kind, timerLocalID: String) {
+        self.kind = kind
+        self.timerLocalID = timerLocalID
+    }
+
+    init?(encoded: String) {
+        let parts = encoded.split(separator: ":", maxSplits: 2).map(String.init)
+        guard parts.count == 3, parts[0] == "feed", let kind = Kind(rawValue: parts[1]) else { return nil }
+        self.init(kind, timerLocalID: parts[2])
+    }
+
+    /// Logs the button's feed (Done on its own side, or the side tapped), or for Switch logs it and
+    /// starts the other side. Only that timer: a button never finishes some other feed. Its banner
+    /// ends either way, so a second tap or a timer logged elsewhere never leaves it up.
+    @MainActor
+    func perform(in context: ModelContext) async {
+        Analytics.widgetIntent("FeedButton:\(kind.rawValue)")
+        let repo = LocalRepository(context: context)
+        let id = UUID(uuidString: timerLocalID)
+        // Read before closing anything: a side switched at or past the hour closes itself first,
+        // and the next side must still start.
+        let timer = id.flatMap { LocalStore.fetch(localID: $0, in: context) }
+        let wasRunning = timer?.isRunningTimer == true
+        let side = wasRunning ? timer?.feedSide : nil
+        let child = wasRunning ? timer?.childID : nil
+
+        var change = repo.autoCloseFeeds()
+        if wasRunning, let id {
+            switch kind {
+            case .switch:
+                let started = repo.startFeedSide((side ?? .right).other, childID: child)
+                change.closed += started.closed
+                change.started = started.started
+            case .done, .left, .right, .both:
+                // Still running unless auto-close just logged it.
+                if let current = LocalStore.fetch(localID: id, in: context), current.isRunningTimer {
+                    let chosen = FeedSide(rawValue: kind.rawValue) ?? side ?? .both
+                    change.closed.append((id, repo.finishFeeding(current, side: chosen)?.localID))
+                }
+            }
+        }
+        await FeedFinisher.apply(change, in: context, alsoEnd: timerLocalID)
+    }
+}
+
 /// The steps the feed intents share: open the store, then deliver a ``FeedChange``.
 enum FeedFinisher {
     /// Set by the app at launch to bring the Live Activity in line with the store (start one for a

@@ -3,7 +3,7 @@ import SwiftUI
 import WidgetKit
 
 /// Left / Right / Both for a running feed that wasn't started on a side: each tap logs it on that
-/// side via ``FinishFeedTimerIntent``, no app launch. The feed's Stop control on the Active Timer
+/// side via ``LogTimerIntent`` (``FeedButtonAction``), no app launch. The feed's Stop control on the Active Timer
 /// widget, the Live Activity and the Quick Start Lock Screen widget, so all of them finish a feed
 /// the same way.
 ///
@@ -17,7 +17,7 @@ struct FeedSideButtons: View {
     var body: some View {
         HStack(spacing: compact ? 4 : 5) {
             ForEach(FeedSide.allCases, id: \.self) { side in
-                Button(intent: FinishFeedTimerIntent(timerLocalID: timerLocalID, side: side)) {
+                Button(intent: LogTimerIntent(timerLocalID: FeedButtonAction(FeedButtonAction.Kind(rawValue: side.rawValue) ?? .done, timerLocalID: timerLocalID).encoded)) {
                     FeedButtonLabel(text: compact ? side.shortTitle : side.title, compact: compact)
                 }
                 .buttonStyle(.plain)
@@ -28,8 +28,8 @@ struct FeedSideButtons: View {
 }
 
 /// "Switch to Right" and "Done" for a feed timed on a side: sides come in pairs, so the next tap is
-/// usually the other side, which logs this one (``SwitchFeedSideIntent``); Done logs this side and
-/// ends the feed (``FinishFeedTimerIntent``). Same places and styling as ``FeedSideButtons``.
+/// usually the other side, which logs this one; Done logs this side and ends the feed. Both run
+/// ``LogTimerIntent`` with a ``FeedButtonAction``. Same places and styling as ``FeedSideButtons``.
 struct FeedPairButtons: View {
     let timerLocalID: String
     let side: FeedSide
@@ -37,13 +37,13 @@ struct FeedPairButtons: View {
 
     var body: some View {
         HStack(spacing: compact ? 4 : 5) {
-            Button(intent: SwitchFeedSideIntent(timerLocalID: timerLocalID)) {
+            Button(intent: LogTimerIntent(timerLocalID: FeedButtonAction(.switch, timerLocalID: timerLocalID).encoded)) {
                 FeedButtonLabel(text: compact ? "→ \(side.other.shortTitle)" : "Switch to \(side.other.title)",
                                 compact: compact)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Switch to \(side.other.title.lowercased()) side")
-            Button(intent: FinishFeedTimerIntent(timerLocalID: timerLocalID)) {
+            Button(intent: LogTimerIntent(timerLocalID: FeedButtonAction(.done, timerLocalID: timerLocalID).encoded)) {
                 FeedButtonLabel(text: "Done", compact: compact)
             }
             .buttonStyle(.plain)
