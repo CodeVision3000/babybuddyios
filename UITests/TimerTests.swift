@@ -36,17 +36,61 @@ final class TimerTests: UITestCase {
         expect(app.otherElements["Logged Feeding"])
         expect(app.buttons.labeled("Start a timer"))
 
-        // The next feed: started from the dashboard, its Stop sheet offers the other side.
+        // The next feed starts on the other side: sides come in pairs.
         let startSheet = app.navigationBars["Start Timer"]
         tap(app.buttons["Add"])
         tap(app.buttons["Start timer"])
         expect(startSheet)
         tap(app.buttons["Feeding"])
-        tap(app.buttons["Start feeding timer"])
+        expect(app.staticTexts["Next: Left"])
+        tap(app.buttons["Cancel"])
         expectGone(startSheet)
-        tap(app.buttons["Stop"])
-        expect(app.staticTexts["Which side?"])
-        expect(app.staticTexts["Last: Right"])
+    }
+
+    /// A feed is timed one side at a time: switching logs the first side and starts the other,
+    /// and Done logs the second. Each side is its own feeding, with no form.
+    func testFeedSidesComeInPairs() {
+        launch(["BB_TOAST_SECONDS": "30"])
+        let feedingsToday = expect(element(labeled: "Feedings, "))
+        let before = feedingsToday.label
+        let startSheet = app.navigationBars["Start Timer"]
+        tap(app.buttons["Add"])
+        tap(app.buttons["Start timer"])
+        expect(startSheet)
+        tap(app.buttons["Feeding"])
+        expect(app.staticTexts["Next: Left"])
+        tap(app.buttons["Start left"])
+        expectGone(startSheet)
+        let left = expect(element(labeled: "Feeding · Left running"))
+
+        tap(app.buttons["Switch to right"])
+        expectGone(left)
+        expect(app.otherElements["Logged Feeding"])
+        let right = expect(element(labeled: "Feeding · Right running"))
+        XCTAssertNotEqual(feedingsToday.label, before, "The left side should count toward today")
+        let afterLeft = feedingsToday.label
+
+        tap(app.buttons["Done feeding"])
+        expectGone(right)
+        XCTAssertNotEqual(feedingsToday.label, afterLeft, "The right side is its own feeding")
+        expect(element(labeled: "Tummy time running")) // the seeded timer runs on
+    }
+
+    /// The backup for a forgotten feed: a side still running at the limit (an hour; 20 seconds
+    /// here) logs itself, with the app open and no tap.
+    func testForgottenFeedClosesItself() {
+        launch(["BB_FEED_AUTOCLOSE_SECONDS": "20", "BB_TOAST_SECONDS": "30"])
+        let feedingsToday = expect(element(labeled: "Feedings, "))
+        let before = feedingsToday.label
+        tap(app.buttons["Add"])
+        tap(app.buttons["Start timer"])
+        tap(app.buttons["Feeding"])
+        tap(app.buttons["Start right"])
+        let right = expect(element(labeled: "Feeding · Right running"))
+
+        expectGone(right, timeout: 60)
+        XCTAssertNotEqual(feedingsToday.label, before, "The closed side should count toward today")
+        expect(element(labeled: "Tummy time running")) // only feeds close themselves
     }
 
     func testStopTimerOneTapLogAndDiscard() {

@@ -117,4 +117,154 @@ final class FeedSideTests: XCTestCase {
         repo.stopTimer(stopped)
         XCTAssertNil(LocalRepository.runningFeedTimer(childID: 1, in: context))
     }
+
+    // MARK: Timing a feed one side at a time
+
+    private let t0 = Date(timeIntervalSince1970: 1_705_330_800) // 2024-01-15 10:00 EST
+
+    private func runningTimers() throws -> [LocalEntity] {
+        try context.fetch(FetchDescriptor<LocalEntity>()).filter(\.isRunningTimer)
+    }
+    private func feedings() throws -> [LocalEntity] {
+        try context.fetch(FetchDescriptor<LocalEntity>()).filter { $0.kind == .feeding }
+    }
+
+    /// The side rides in the timer's name, so it reaches the server and every other device.
+    func testSideTimerNamesRoundTrip() {
+        XCTAssertEqual(FeedSide.left.timerName, "Feeding · Left")
+        XCTAssertEqual(FeedSide(timerName: "Feeding · Right"), .right)
+        XCTAssertNil(FeedSide(timerName: "Feeding"))
+        XCTAssertNil(FeedSide(timerName: "Feeding · Both"), "Both isn't a side a feed is timed on")
+        XCTAssertEqual(TimerActivity(timerName: "Feeding · Left"), .feeding,
+                       "A side timer pulled from the server, with no local hint, is still a feed")
+        XCTAssertEqual(FeedSide.left.other, .right)
+        XCTAssertEqual(FeedSide.right.other, .left)
+    }
+
+    func testStartingASideStartsANamedFeedTimer() throws {
+        let change = repo.startFeedSide(.left, childID: 1, at: t0)
+
+        let timers = try runningTimers()
+        XCTAssertEqual(timers.count, 1)
+        XCTAssertEqual(timers.first?.localID, change.started)
+        XCTAssertEqual(timers.first?.feedSide, .left)
+        XCTAssertEqual(timers.first.flatMap(TimerActivity.init(timer:)), .feeding)
+        XCTAssertEqual(timers.first?.timestamp, t0)
+        XCTAssertTrue(change.closed.isEmpty)
+    }
+
+    /// Sides come in pairs: starting the next side logs the one before, ending where it starts.
+    func testStartingTheOtherSideLogsTheFirst() throws {
+        repo.startFeedSide(.left, childID: 1, at: t0)
+        let change = repo.startFeedSide(.right, childID: 1, at: t0.addingTimeInterval(600))
+
+        let logged = try feedings()
+        XCTAssertEqual(logged.count, 1)
+        XCTAssertEqual(logged.first?.payloadObject["method"] as? String, "left breast")
+        XCTAssertEqual((logged.first?.payloadObject["start"] as? String).flatMap(APIDate.parse), t0)
+        XCTAssertEqual((logged.first?.payloadObject["end"] as? String).flatMap(APIDate.parse),
+                       t0.addingTimeInterval(600))
+        XCTAssertEqual(change.closed.count, 1)
+        XCTAssertEqual(change.closed.first?.logged, logged.first?.localID)
+
+        let timers = try runningTimers()
+        XCTAssertEqual(timers.map(\.feedSide), [.right])
+        XCTAssertEqual(SharedDefaults.lastFeedSide, .left)
+    }
+
+    func testStartingTheRunningSideDoesNothing() throws {
+        repo.startFeedSide(.left, childID: 1, at: t0)
+        let change = repo.startFeedSide(.left, childID: 1, at: t0.addingTimeInterval(60))
+
+        XCTAssertTrue(change.isEmpty)
+        XCTAssertEqual(try runningTimers().count, 1)
+        XCTAssertTrue(try feedings().isEmpty)
+    }
+
+    /// One child's next side never logs another child's feed.
+    func testAnotherChildsFeedKeepsRunning() throws {
+        repo.startFeedSide(.left, childID: 1, at: t0)
+        repo.startFeedSide(.right, childID: 2, at: t0.addingTimeInterval(60))
+
+        XCTAssertEqual(try runningTimers().count, 2)
+        XCTAssertTrue(try feedings().isEmpty)
+    }
+
+    /// A feed started without a side is taken to be the other side of the one starting.
+    func testAFeedWithNoSideIsLoggedAsTheOtherSide() throws {
+        _ = timer(.feeding, child: 1)
+        repo.startFeedSide(.right, childID: 1, at: Date(timeIntervalSince1970: 1_705_331_400))
+
+        XCTAssertEqual(try feedings().first?.payloadObject["method"] as? String, "left breast")
+        XCTAssertEqual(try runningTimers().map(\.feedSide), [.right])
+    }
+
+    // MARK: Closing a forgotten side
+
+    /// A side still running past the hour is logged as exactly an hour, on its own side.
+    func testAutoCloseCapsAForgottenSideAtAnHour() throws {
+        repo.startFeedSide(.right, childID: 1, at: t0)
+        let change = repo.autoCloseFeeds(now: t0.addingTimeInterval(3 * 3600))
+
+        let logged = try feedings()
+        XCTAssertEqual(logged.count, 1)
+        XCTAssertEqual(logged.first?.payloadObject["method"] as? String, "right breast")
+        XCTAssertEqual((logged.first?.payloadObject["end"] as? String).flatMap(APIDate.parse),
+                       t0.addingTimeInterval(FeedSide.autoCloseAfter))
+        XCTAssertTrue(try runningTimers().isEmpty)
+        XCTAssertEqual(change.closed.count, 1)
+    }
+
+    func testAutoCloseLeavesAFeedUnderTheHour() throws {
+        repo.startFeedSide(.left, childID: 1, at: t0)
+        let change = repo.autoCloseFeeds(now: t0.addingTimeInterval(FeedSide.autoCloseAfter - 1))
+
+        XCTAssertTrue(change.isEmpty)
+        XCTAssertEqual(try runningTimers().count, 1)
+        XCTAssertEqual(LocalRepository.nextFeedAutoClose(in: context), t0.addingTimeInterval(FeedSide.autoCloseAfter))
+    }
+
+    /// A plain "Feeding" timer (the web UI, another device, a bottle) could be anything, so only
+    /// feeds timed on a side close themselves.
+    func testAutoCloseLeavesAFeedWithNoSide() throws {
+        _ = timer(.feeding, child: 1)
+        repo.autoCloseFeeds(now: t0.addingTimeInterval(3 * 3600))
+
+        XCTAssertEqual(try runningTimers().count, 1)
+        XCTAssertTrue(try feedings().isEmpty)
+        XCTAssertNil(LocalRepository.nextFeedAutoClose(in: context))
+    }
+
+    /// Only feeds close themselves; a long nap runs on.
+    func testAutoCloseLeavesOtherTimers() throws {
+        _ = timer(.sleep, child: 1, start: "2024-01-15T06:00:00-05:00")
+        repo.autoCloseFeeds(now: t0.addingTimeInterval(3 * 3600))
+
+        XCTAssertEqual(try runningTimers().count, 1)
+        XCTAssertTrue(try feedings().isEmpty)
+    }
+
+    // MARK: Which side is next
+
+    func testNextSideAlternates() throws {
+        XCTAssertEqual(FeedSide.suggestedNext, .left, "Left with nothing logged yet")
+        SharedDefaults.lastFeedSide = .left
+        XCTAssertEqual(FeedSide.suggestedNext, .right)
+
+        // A side running now wins over the last one logged.
+        repo.startFeedSide(.right, childID: 1, at: t0)
+        XCTAssertEqual(LocalRepository.nextFeedSide(childID: 1, in: context), .left)
+        XCTAssertEqual(LocalRepository.nextFeedSide(childID: 2, in: context), .right)
+    }
+
+    /// The heads-up fires when the side closes, and names it.
+    func testAutoCloseNotice() throws {
+        repo.startFeedSide(.left, childID: 1, at: t0)
+        let timer = try XCTUnwrap(try runningTimers().first)
+        let request = FeedAutoClosePolicy.request(for: timer, childName: "Maya")
+
+        XCTAssertEqual(request.fireDate, t0.addingTimeInterval(FeedSide.autoCloseAfter))
+        XCTAssertTrue(request.id.hasPrefix("feedclose-"))
+        XCTAssertTrue(request.body.contains("Maya's left side"), request.body)
+    }
 }

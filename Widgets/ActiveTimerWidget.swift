@@ -26,6 +26,11 @@ struct TimerSnapshot {
     let name: String
     let start: Date
     let activity: TimerActivity?
+
+    /// The side a feed is timing, from its name ("Feeding · Left"), or `nil`.
+    var side: FeedSide? { FeedSide(timerName: name) }
+    /// Whether it closes itself at the hour: a feed timed on a side.
+    var isFeed: Bool { side != nil }
 }
 
 struct ActiveTimerEntry: TimelineEntry {
@@ -94,12 +99,12 @@ struct ActiveTimerView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Image(systemName: timer.activity?.systemImage ?? "timer")
-                    Text(timer.start, style: .timer)
+                    TimerElapsedText(start: timer.start, isFeed: timer.isFeed)
                         .monospacedDigit()
                 }
                 .font(.headline)
                 .widgetAccentable()
-                FeedSideButtons(timerLocalID: timer.localID, compact: true)
+                FeedButtons(timerLocalID: timer.localID, side: timer.side, compact: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .widgetURL(timerURL(timer))
@@ -108,7 +113,7 @@ struct ActiveTimerView: View {
                 Label(timer.name, systemImage: timer.activity?.systemImage ?? "timer")
                     .font(.headline)
                     .widgetAccentable()
-                Text(timer.start, style: .timer)
+                TimerElapsedText(start: timer.start, isFeed: timer.isFeed)
                     .font(.title2)
                     .monospacedDigit()
             }
@@ -129,7 +134,7 @@ struct ActiveTimerView: View {
                 VStack(spacing: 1) {
                     Image(systemName: timer.activity?.systemImage ?? "timer")
                         .font(.system(size: 14, weight: .semibold))
-                    Text(timer.start, style: .timer)
+                    TimerElapsedText(start: timer.start, isFeed: timer.isFeed)
                         .font(.system(size: 11, weight: .medium))
                         .monospacedDigit()
                         .minimumScaleFactor(0.5)
@@ -151,7 +156,7 @@ struct ActiveTimerView: View {
         if let timer = entry.timer {
             // Inline must stay one line; the icon conveys the activity and the elapsed keeps ticking.
             Label {
-                Text(timer.start, style: .timer)
+                TimerElapsedText(start: timer.start, isFeed: timer.isFeed)
             } icon: {
                 Image(systemName: timer.activity?.systemImage ?? "timer")
             }
@@ -181,7 +186,7 @@ struct ActiveTimerView: View {
                     .foregroundStyle(BBColor.feeding)
             }
             Spacer(minLength: 4)
-            Text(timer.start, style: .timer)
+            TimerElapsedText(start: timer.start, isFeed: timer.isFeed)
                 .font(.system(size: 30, weight: .medium, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
@@ -196,13 +201,15 @@ struct ActiveTimerView: View {
     /// gets one button per side; pumping needs an amount, so it opens a pre-filled in-app form via
     /// a deep link; an unrecognized timer name opens the generic timer actions.
     @ViewBuilder private func stopControl(_ timer: TimerSnapshot) -> some View {
-        let route = TimerStopRoute.resolve(localID: timer.localID, activity: timer.activity)
+        let route = TimerStopRoute.resolve(localID: timer.localID, activity: timer.activity, side: timer.side)
         switch route {
         case .log(let id):
             Button(intent: LogTimerIntent(timerLocalID: id)) { stopLabel }
                 .buttonStyle(.plain)
         case .feedSide(let id):
             FeedSideButtons(timerLocalID: id)
+        case .feedPair(let id, let side):
+            FeedPairButtons(timerLocalID: id, side: side)
         case .convertForm, .openActions:
             Link(destination: route.deepLink!) { stopLabel }
         }

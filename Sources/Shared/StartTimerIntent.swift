@@ -25,6 +25,20 @@ struct StartTimerIntent: AppIntent {
             for: LocalStore.schema,
             configurations: ModelConfiguration(schema: LocalStore.schema, url: LocalStore.storeURL))
 
+        // A feed is timed one side at a time: start the side due next, logging any side running.
+        if activity == .feeding {
+            let context = container.mainContext
+            var change = LocalRepository(context: context).autoCloseFeeds()
+            let child = SharedDefaults.selectedChildID
+            let started = LocalRepository(context: context).startFeedSide(
+                LocalRepository.nextFeedSide(childID: child, in: context), childID: child)
+            change.closed += started.closed
+            change.started = started.started
+            Analytics.timerStarted(activity: activity.rawValue, source: .widget)
+            await FeedFinisher.apply(change, in: context)
+            return .result()
+        }
+
         var payload: [String: Any] = [
             // Set start locally so elapsed time is correct immediately and survives the round
             // trip; the server accepts a provided start.

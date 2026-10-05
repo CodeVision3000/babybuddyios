@@ -6,8 +6,9 @@ import AppIntents
 /// one tap, via ``StartTimerIntent``. Static content — it looks the same whether or not a
 /// timer is running, so it's always useful.
 ///
-/// The Lock Screen rectangle is the exception: Feed / Sleep / Tummy, and while a feed runs, its
-/// Left / Right / Both instead, so one Lock Screen widget starts a feed and finishes it.
+/// The feeding tile starts the side due next. The Lock Screen rectangle offers Feed Left / Feed
+/// Right / Sleep, and while a feed runs, Switch / Done instead, so one Lock Screen widget runs a
+/// whole feed.
 struct QuickStartWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BabyBuddyQuickStart", provider: QuickStartProvider()) { entry in
@@ -62,14 +63,14 @@ struct QuickStartView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Image(systemName: TimerActivity.feeding.systemImage)
-                    Text(feed.start, style: .timer).monospacedDigit()
+                    TimerElapsedText(start: feed.start, isFeed: feed.side != nil).monospacedDigit()
                     LastFeedSideText()
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .font(.headline)
                 .widgetAccentable()
-                FeedSideButtons(timerLocalID: feed.localID, compact: true)
+                FeedButtons(timerLocalID: feed.localID, side: feed.side, compact: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -83,17 +84,30 @@ struct QuickStartView: View {
                 .font(.headline)
                 .widgetAccentable()
                 HStack(spacing: 4) {
-                    ForEach([TimerActivity.feeding, .sleep, .tummyTime], id: \.self) { activity in
-                        Button(intent: StartTimerIntent(activity: activity)) {
-                            Image(systemName: activity.systemImage)
-                                .font(.system(size: 14, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 4)
-                                .background(.quaternary, in: Capsule())
+                    // A feed starts on a side; the other side then logs it (sides come in pairs).
+                    ForEach(FeedSide.timedSides, id: \.self) { side in
+                        Button(intent: StartFeedSideIntent(side: side)) {
+                            HStack(spacing: 2) {
+                                Image(systemName: TimerActivity.feeding.systemImage)
+                                Text(side.shortTitle)
+                            }
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(.quaternary, in: Capsule())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("Start \(activity.timerName.lowercased()) timer")
+                        .accessibilityLabel("Start feeding on the \(side.title.lowercased())")
                     }
+                    Button(intent: StartTimerIntent(activity: .sleep)) {
+                        Image(systemName: TimerActivity.sleep.systemImage)
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Start sleep timer")
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -120,23 +134,37 @@ struct QuickStartView: View {
         }
     }
 
-    private func tile(_ activity: TimerActivity) -> some View {
-        let tint = BBColor.tint(for: activity)
-        return Button(intent: StartTimerIntent(activity: activity)) {
-            VStack(alignment: .leading, spacing: 0) {
-                Image(systemName: activity.systemImage)
-                    .font(.system(size: 17, weight: .semibold))
-                Spacer(minLength: 2)
-                Text(activity.timerName)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+    /// A feed starts on the side due next ("Feeding · R"), so the tile alternates sides on its own.
+    @ViewBuilder private func tile(_ activity: TimerActivity) -> some View {
+        if activity == .feeding {
+            let side = FeedSide.suggestedNext
+            Button(intent: StartFeedSideIntent(side: side)) {
+                tileLabel(activity, title: "\(activity.timerName) · \(side.shortTitle)")
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(8)
-            .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-            .foregroundStyle(tint)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Start feeding on the \(side.title.lowercased())")
+        } else {
+            Button(intent: StartTimerIntent(activity: activity)) {
+                tileLabel(activity, title: activity.timerName)
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+    }
+
+    private func tileLabel(_ activity: TimerActivity, title: String) -> some View {
+        let tint = BBColor.tint(for: activity)
+        return VStack(alignment: .leading, spacing: 0) {
+            Image(systemName: activity.systemImage)
+                .font(.system(size: 17, weight: .semibold))
+            Spacer(minLength: 2)
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(8)
+        .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+        .foregroundStyle(tint)
     }
 }

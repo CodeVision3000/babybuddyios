@@ -95,6 +95,26 @@ enum ForgottenTimerPolicy {
     }
 }
 
+/// The heads-up when a forgotten feed closes itself at ``FeedSide/autoCloseAfter``. It needs no
+/// setting of its own: it's scheduled whenever the app may already show notifications, and never
+/// asks for permission.
+enum FeedAutoClosePolicy {
+    static func identifier(for timer: LocalEntity) -> String { "feedclose-\(timer.localID.uuidString)" }
+
+    static func request(for timer: LocalEntity, childName: String?) -> ForgottenTimerPolicy.Request {
+        let limit = FeedSide.autoCloseAfter
+        let side = timer.feedSide.map { "\($0.title.lowercased()) side" } ?? "feed" // always a side
+        let owner = childName.map { "\($0)'s " } ?? "The "
+        return ForgottenTimerPolicy.Request(
+            id: identifier(for: timer),
+            fireDate: timer.timestamp.addingTimeInterval(limit),
+            title: "Feed closed after \(EntityFormatting.formatInterval(limit))",
+            body: "\(owner)\(side) was still running, so it was logged as "
+                + "\(EntityFormatting.formatInterval(limit)). Tap to adjust it.",
+            url: "babybuddy://home")
+    }
+}
+
 /// When a medication's next dose is OK, and the reminder that says so. Mirrors upstream Baby
 /// Buddy's `next_dose_time` (`time + next_dose_interval`), except that only the newest dose of each
 /// medication per child counts: a later dose supersedes an earlier one's reminder.
@@ -204,12 +224,14 @@ final class LocalAlerts {
     func reconcile() async {
         let timersOn = ForgottenTimerPolicy.isEnabled, dosesOn = MedicationReminderPolicy.isEnabled
         let checksOn = SickMode.checkHours > 0 && !SickModeStore.shared.active.isEmpty
-        let wanted = timersOn || dosesOn || checksOn ? wantedRequests() : (timers: [], doses: [], checks: [])
+        let authorization = await center.notificationSettings().authorizationStatus
+        let feedsOn = authorization == .authorized || authorization == .provisional
+        let wanted = timersOn || dosesOn || checksOn || feedsOn
+            ? wantedRequests() : (timers: [], doses: [], checks: [], feeds: [])
         // The setting can arrive on before permission was ever asked (a restored App Group
         // default); ask now rather than schedule alerts that can never show. Temperature checks are
         // on by default, so they ask the first time one is due: sick mode on, with a fever.
-        if timersOn || dosesOn || !wanted.checks.isEmpty,
-           await center.notificationSettings().authorizationStatus == .notDetermined {
+        if timersOn || dosesOn || !wanted.checks.isEmpty, authorization == .notDetermined {
             _ = await requestAuthorization()
         }
         let pending = Dictionary(uniqueKeysWithValues: await center.pendingNotificationRequests()
@@ -222,17 +244,23 @@ final class LocalAlerts {
 
         // A dose reminder or temperature check that is already overdue when first seen (an old
         // dose, or the app opened long after) says nothing useful, so only timers fire late.
+        // A feed's close notice that's already overdue has nothing left to say: the feed was logged
+        // when the app came back, which is when this runs.
         for (prefix, requests, firesOverdue) in [("timer-", timersOn ? wanted.timers : [], true),
                                                  ("medication-", dosesOn ? wanted.doses : [], false),
-                                                 ("temperature-", wanted.checks, false)] {
+                                                 ("temperature-", wanted.checks, false),
+                                                 ("feedclose-", feedsOn ? wanted.feeds : [], false)] {
             let plan = ForgottenTimerPolicy.plan(wanted: requests, pending: pending, delivered: delivered,
                                                  prefix: prefix, firesOverdue: firesOverdue)
             center.removePendingNotificationRequests(withIdentifiers: plan.remove)
             // A stopped timer's or superseded dose's delivered banner is stale too; a live one stays.
             let wantedIDs = Set(requests.map(\.id))
-            center.removeDeliveredNotifications(withIdentifiers: delivered.filter {
-                $0.hasPrefix(prefix) && !wantedIDs.contains($0)
-            })
+            // A feed's close notice outlives its timer by design: it says the timer is gone.
+            if prefix != "feedclose-" {
+                center.removeDeliveredNotifications(withIdentifiers: delivered.filter {
+                    $0.hasPrefix(prefix) && !wantedIDs.contains($0)
+                })
+            }
             for request in plan.add {
                 let content = UNMutableNotificationContent()
                 content.title = request.title
@@ -257,11 +285,11 @@ final class LocalAlerts {
     /// in sick mode, in the shared store as wanted requests. Opens its own container, like the Live
     /// Activity manager, so widget-started timers are seen too.
     private func wantedRequests() -> (timers: [ForgottenTimerPolicy.Request], doses: [ForgottenTimerPolicy.Request],
-                                      checks: [ForgottenTimerPolicy.Request]) {
+                                      checks: [ForgottenTimerPolicy.Request], feeds: [ForgottenTimerPolicy.Request]) {
         guard let container = try? ModelContainer(
             for: LocalStore.schema,
             configurations: ModelConfiguration(schema: LocalStore.schema, url: LocalStore.storeURL))
-        else { return ([], [], []) }
+        else { return ([], [], [], []) }
         let context = ModelContext(container)
         func fetch(_ kind: String) -> [LocalEntity] {
             (try? context.fetch(FetchDescriptor<LocalEntity>(predicate: #Predicate { $0.kindRaw == kind }))) ?? []
@@ -271,8 +299,12 @@ final class LocalAlerts {
             let first = children.first { $0.serverID == childID }?.payloadObject["first_name"] as? String
             return first.flatMap { $0.isEmpty ? nil : $0 }
         }
-        let timers = fetch("timer").filter(\.isRunningTimer).map {
+        let running = fetch("timer").filter(\.isRunningTimer)
+        let timers = running.map {
             ForgottenTimerPolicy.request(for: $0, childName: firstName($0.childID))
+        }
+        let feeds = running.filter { $0.feedSide != nil }.map {
+            FeedAutoClosePolicy.request(for: $0, childName: firstName($0.childID))
         }
         let doses = MedicationReminderPolicy.latestDoses(fetch("medication")).compactMap {
             MedicationReminderPolicy.request(for: $0, childName: firstName($0.childID))
@@ -287,7 +319,7 @@ final class LocalAlerts {
             return TemperatureCheckPolicy.request(for: newest, value: unit.format(reading.value),
                                                   childName: firstName(child), hours: hours)
         }
-        return (timers, doses, checks)
+        return (timers, doses, checks, feeds)
     }
 }
 

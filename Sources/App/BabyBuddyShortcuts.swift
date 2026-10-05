@@ -1,7 +1,7 @@
 import AppIntents
 
 /// Siri phrases and Shortcuts app actions, ready the moment the app is installed: log a diaper,
-/// start a timer, finish a feed on a side. The intents are the ones the widget buttons run, so
+/// start a timer, feed on a side (which logs the other side), finish a feed. The intents are the ones the widget buttons run, so
 /// "Hey Siri, log a wet diaper in Baby Buddy" logs exactly what a Quick Log tap would.
 ///
 /// App target only: an app declares one provider, and the widget extension must not. Xcode reads
@@ -27,11 +27,19 @@ struct BabyBuddyShortcuts: AppShortcutsProvider {
             shortTitle: "Start timer",
             systemImageName: "stopwatch")
         AppShortcut(
+            intent: StartFeedSideIntent(),
+            phrases: [
+                "Start feeding on the \(\.$side) in \(.applicationName)",
+                "Feed on the \(\.$side) in \(.applicationName)",
+                "Switch to the \(\.$side) in \(.applicationName)",
+            ],
+            shortTitle: "Feed on a side",
+            systemImageName: "drop.fill")
+        AppShortcut(
             intent: FinishFeedingIntent(),
             phrases: [
-                "Finish feeding on the \(\.$side) in \(.applicationName)",
-                "Finish feeding on \(\.$side) in \(.applicationName)",
                 "Finish feeding in \(.applicationName)",
+                "Done feeding in \(.applicationName)",
             ],
             shortTitle: "Finish feed",
             systemImageName: "drop.fill")

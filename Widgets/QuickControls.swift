@@ -33,46 +33,47 @@ struct DiaperControlConfiguration: ControlConfigurationIntent {
     func perform() async throws -> some IntentResult { .result() }
 }
 
-/// Starts a feeding timer: the first half of a feed, finished by ``FinishFeedControl`` or any of
-/// the side buttons.
+/// Starts a feed on the side chosen when the control is added. Sides come in pairs, so a control
+/// per side covers a whole feed: Left starts it, Right logs Left and starts Right.
 @available(iOS 18.0, *)
 struct StartFeedControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "BabyBuddyStartFeedControl") {
-            ControlWidgetButton(action: StartTimerIntent(activity: .feeding)) {
-                Label("Start feed", systemImage: TimerActivity.feeding.systemImage)
+        AppIntentControlConfiguration(kind: "BabyBuddyStartFeedControl",
+                                      intent: StartFeedControlConfiguration.self) { configuration in
+            ControlWidgetButton(action: StartFeedSideIntent(side: configuration.side)) {
+                Label("Feed \(configuration.side.title.lowercased())",
+                      systemImage: TimerActivity.feeding.systemImage)
             }
         }
-        .displayName("Start feed")
-        .description("Starts a feeding timer.")
-    }
-}
-
-/// Finishes the running feed on the side chosen when the control is added.
-@available(iOS 18.0, *)
-struct FinishFeedControl: ControlWidget {
-    var body: some ControlWidgetConfiguration {
-        AppIntentControlConfiguration(kind: "BabyBuddyFinishFeedControl",
-                                      intent: FinishFeedControlConfiguration.self) { configuration in
-            ControlWidgetButton(action: FinishFeedingIntent(side: configuration.side)) {
-                Label("Finish \(configuration.side.title.lowercased())", systemImage: "stop.fill")
-            }
-        }
-        .displayName("Finish feed")
-        .description("Stops the feeding timer and logs the side.")
+        .displayName("Feed on a side")
+        .description("Starts a feeding timer on a side, logging the other side.")
         .promptsForUserConfiguration()
     }
 }
 
 @available(iOS 18.0, *)
-struct FinishFeedControlConfiguration: ControlConfigurationIntent {
-    static var title: LocalizedStringResource = "Finish feed"
+struct StartFeedControlConfiguration: ControlConfigurationIntent {
+    static var title: LocalizedStringResource = "Feed on a side"
     static var isDiscoverable = false
 
     @Parameter(title: "Side", default: .left)
     var side: FeedSide
 
     func perform() async throws -> some IntentResult { .result() }
+}
+
+/// Finishes the running feed on the side it's timing.
+@available(iOS 18.0, *)
+struct FinishFeedControl: ControlWidget {
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: "BabyBuddyFinishFeedControl") {
+            ControlWidgetButton(action: FinishFeedingIntent()) {
+                Label("Finish feed", systemImage: "stop.fill")
+            }
+        }
+        .displayName("Finish feed")
+        .description("Stops the feeding timer and logs its side.")
+    }
 }
 
 private extension QuickLogAction {

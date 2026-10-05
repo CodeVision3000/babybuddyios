@@ -55,7 +55,7 @@ multiple children run through all of it.
 |---|---|
 | ⏱️ **Timers from a widget** | Start a feeding, sleep, tummy-time or pumping timer from the App Home Screen — stopping it files the record. |
 | ⚡ **One-tap Quick Log** | A widget that files a complete diaper change — wet, solid or both — or a feeding, with a customizable default. |
-| 🤱 **Finish a feed by side** | Tap Left, Right or Both to log a running breastfeed, from the app, a widget or the Live Activity. It shows which side you used last. |
+| 🤱 **Feeds timed by side** | Start Left or Right; switching sides logs the first one, and Done logs the second. Each side is its own feeding, the next side is suggested, and a side forgotten for an hour logs itself as an hour. Works from the app, the widgets and the Live Activity. |
 | 🎛️ **Controls and Siri** | Log a diaper or start and finish a feed from Control Center, the Lock Screen or the Action button, or ask Siri: "Log a wet diaper in Baby Buddy." |
 | 🔴 **Live Activity** | A running timer ticks away on the Lock Screen and in the Dynamic Island. |
 | 🕐 **Status at a glance** | Home Screen, Lock Screen and StandBy widgets show the last feed, sleep and change, plus today's counts. |

@@ -29,6 +29,15 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .feeding), .feedSide(localID: "A"))
     }
 
+    /// A feed timed on a side switches to the other side or finishes on its own.
+    func testStopRoutePairsASidedFeed() {
+        XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .feeding, side: .left),
+                       .feedPair(localID: "A", side: .left))
+        XCTAssertNil(TimerStopRoute.feedPair(localID: "A", side: .left).deepLink)
+        // A side only means something on a feed.
+        XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .sleep, side: .left), .log(localID: "A"))
+    }
+
     func testStopRouteOpensFormForFieldActivities() {
         XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .pumping),
                        .convertForm(localID: "A", kind: .pumping))

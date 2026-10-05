@@ -37,7 +37,7 @@ struct RunningTimerLiveActivity: Widget {
                         .foregroundStyle(BBColor.success)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.start, style: .timer)
+                    TimerElapsedText(start: context.state.start, isFeed: FeedSide(timerName: context.state.timerName) != nil)
                         .font(.system(size: 34, weight: .medium, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
@@ -50,7 +50,7 @@ struct RunningTimerLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: icon).foregroundStyle(tint)
             } compactTrailing: {
-                Text(context.state.start, style: .timer)
+                TimerElapsedText(start: context.state.start, isFeed: FeedSide(timerName: context.state.timerName) != nil)
                     .monospacedDigit()
                     .foregroundStyle(tint)
                     .frame(maxWidth: 44)
@@ -91,7 +91,7 @@ struct RunningTimerLiveActivity: Widget {
                                 .lineLimit(1)
                             Circle().fill(BBColor.success).frame(width: 7, height: 7) // running
                         }
-                        Text(context.state.start, style: .timer)
+                        TimerElapsedText(start: context.state.start, isFeed: FeedSide(timerName: context.state.timerName) != nil)
                             .font(.system(size: 30, weight: .medium, design: .rounded))
                             .monospacedDigit()
                             .lineLimit(1)
@@ -113,13 +113,16 @@ struct RunningTimerLiveActivity: Widget {
     @ViewBuilder
     private func stopControl(_ context: ActivityViewContext<RunningTimerAttributes>) -> some View {
         let route = TimerStopRoute.resolve(localID: context.attributes.timerLocalID,
-                                           activity: context.state.activity)
+                                           activity: context.state.activity,
+                                           side: FeedSide(timerName: context.state.timerName))
         switch route {
         case .log(let id):
             Button(intent: LogTimerIntent(timerLocalID: id)) { stopLabel }
                 .buttonStyle(.plain)
         case .feedSide(let id):
             FeedSideButtons(timerLocalID: id)
+        case .feedPair(let id, let side):
+            FeedPairButtons(timerLocalID: id, side: side)
         case .convertForm, .openActions:
             Link(destination: route.deepLink!) { stopLabel }
         }
