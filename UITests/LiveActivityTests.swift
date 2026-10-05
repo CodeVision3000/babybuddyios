@@ -84,9 +84,12 @@ final class LiveActivityTests: UITestCase {
         let activity = expect(liveActivity, timeout: bannerTimeout)
         XCTAssertTrue(activity.staticTexts["Maya · Feeding"].exists)
         XCTAssertFalse(activity.buttons["Stop"].exists, "A feed finishes by side, not Stop")
-        tap(activity.buttons["Finish feeding on left"])
-
-        // Not asserting the banner goes: the seeded tummy timer still runs, and can take it over.
+        // SpringBoard may expose the button by its accessibility label or by its visible text.
+        tap(activity.buttons.matching(
+            NSPredicate(format: "label == 'Finish feeding on left' OR label == 'Left'")).firstMatch)
+        // Wait for the feed to leave the banner before going back, so the intent has finished. Not
+        // the whole banner: the seeded tummy timer still runs, and can take it over.
+        expectGone(activity.staticTexts["Maya · Feeding"], timeout: bannerTimeout)
         returnToApp()
         expectGone(element(labeled: "Feeding running"))
         XCTAssertFalse(app.navigationBars["Convert to Feeding"].exists, "A side logs without the form")
