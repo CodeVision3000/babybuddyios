@@ -17,7 +17,7 @@ struct FeedSideButtons: View {
     var body: some View {
         HStack(spacing: compact ? 4 : 5) {
             ForEach(FeedSide.allCases, id: \.self) { side in
-                Button(intent: FinishFeedTimerIntent(side: side, timerLocalID: timerLocalID)) {
+                Button(intent: FinishFeedTimerIntent(timerLocalID: timerLocalID, side: side)) {
                     FeedButtonLabel(text: compact ? side.shortTitle : side.title, compact: compact)
                 }
                 .buttonStyle(.plain)
@@ -43,7 +43,7 @@ struct FeedPairButtons: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Switch to \(side.other.title.lowercased()) side")
-            Button(intent: FinishFeedTimerIntent(side: side, timerLocalID: timerLocalID)) {
+            Button(intent: FinishFeedTimerIntent(timerLocalID: timerLocalID)) {
                 FeedButtonLabel(text: "Done", compact: compact)
             }
             .buttonStyle(.plain)

@@ -107,31 +107,33 @@ struct FinishFeedingIntent: LiveActivityIntent {
 }
 
 /// A side button on a widget or the Live Activity: "Done" on a side, or Left / Right / Both on a
-/// feed that wasn't started on one. Logs the feed that button belongs to on `side`. Shaped exactly
-/// like ``LogTimerIntent``, the Stop button: a required timer id, and the banner ends even when
-/// that timer is already gone, so the button never leaves a stale banner up.
+/// feed that wasn't started on one. Logs the feed that button belongs to. Shaped exactly like
+/// ``LogTimerIntent``, the Stop button that works from the banner: plain-text parameters only (the
+/// timer's id, and the side's raw value, empty for the side the timer is already timing), and the
+/// banner ends even when that timer is already gone, so the button never leaves a stale banner up.
 struct FinishFeedTimerIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Finish feeding timer"
-    static var description = IntentDescription("Logs a running feeding timer on the side you choose.")
+    static var description = IntentDescription("Logs a running feeding timer.")
     // The widget's own button; Siri and Shortcuts use ``FinishFeedingIntent``.
     static var isDiscoverable = false
-
-    @Parameter(title: "Side")
-    var side: FeedSide
 
     @Parameter(title: "Timer")
     var timerLocalID: String
 
+    /// A ``FeedSide`` raw value, or empty for the side the timer is timing.
+    @Parameter(title: "Side")
+    var sideRaw: String
+
     init() {}
-    init(side: FeedSide, timerLocalID: String) {
-        self.side = side
+    init(timerLocalID: String, side: FeedSide? = nil) {
         self.timerLocalID = timerLocalID
+        self.sideRaw = side?.rawValue ?? ""
     }
 
     @MainActor
     func perform() async throws -> some IntentResult {
         Analytics.start()
-        Analytics.widgetIntent("FinishFeedTimer:\(side.rawValue)")
+        Analytics.widgetIntent("FinishFeedTimer:\(sideRaw.isEmpty ? "own" : sideRaw)")
         let context = try FeedFinisher.context()
         let repo = LocalRepository(context: context)
         var change = repo.autoCloseFeeds()
@@ -139,6 +141,7 @@ struct FinishFeedTimerIntent: LiveActivityIntent {
         if let id = UUID(uuidString: timerLocalID),
            let timer = LocalStore.fetch(localID: id, in: context),
            timer.isRunningTimer {
+            let side = FeedSide(rawValue: sideRaw) ?? timer.feedSide ?? .both
             change.closed.append((id, repo.finishFeeding(timer, side: side)?.localID))
         }
         await FeedFinisher.apply(change, in: context, alsoEnd: timerLocalID)
