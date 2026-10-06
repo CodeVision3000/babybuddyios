@@ -164,6 +164,17 @@ YAML, not the generated files, and re-run `xcodegen generate` after any change.
 - **Enter manually** — type your server URL and the API token from your web **User → Settings**
   page.
 
+### No Mac? Build it on GitHub and install from TestFlight
+
+`.github/workflows/testflight.yml` does steps 2 to 4 on GitHub's macOS runner and uploads the
+build to TestFlight under your team, so a fork can ship to its own iPhone with no Mac at all.
+It still needs the paid membership, plus an App Store Connect API key with the Admin role. Add
+these repository secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_PRIVATE_KEY_P8` (the whole `.p8`
+file), `TEAM_ID` and `BUNDLE_PREFIX` (e.g. `com.yourname`). Then run **Actions → TestFlight → Run
+workflow**. The first run registers your app's identifiers. If App Store Connect has no app for
+`<BUNDLE_PREFIX>.BabyBuddy` yet, create one with that bundle ID and run it again. The build ships
+with tips and analytics switched off.
+
 ### Building for the simulator
 
 No signing or developer account needed:

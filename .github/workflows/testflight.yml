@@ -1,0 +1,139 @@
+name: TestFlight
+
+# Run by hand (Actions ▸ TestFlight ▸ Run workflow) to build this fork's main and send it to
+# TestFlight under the fork owner's own Apple Developer team. Nothing here needs a Mac: GitHub's
+# macOS runner archives the app, Xcode signs it with the App Store Connect API key (cloud-managed
+# certificates, automatic provisioning), and the export uploads it.
+#
+# The project is wired to the original developer's team and bundle prefix. This workflow swaps both
+# for the fork's at build time (the README's "Make the identifiers yours" step), so the committed
+# project.yml stays identical to upstream and keeps merging cleanly.
+#
+# Repository secrets (Settings ▸ Secrets and variables ▸ Actions):
+#   ASC_KEY_ID, ASC_ISSUER_ID   the App Store Connect API key. It needs the Admin role: only Admin
+#                               keys may create the cloud-managed distribution certificate.
+#   ASC_PRIVATE_KEY_P8          the key's .p8 file, pasted whole, BEGIN and END lines included.
+#   TEAM_ID                     the 10-character Team ID from developer.apple.com ▸ Membership.
+#   BUNDLE_PREFIX               your reverse-DNS prefix, e.g. com.yourname. The app becomes
+#                               <prefix>.BabyBuddy; the App Store Connect app record must use it.
+#
+# The build number is the run number, so every run uploads a newer build. MARKETING_VERSION is left
+# as committed (see CLAUDE.md ▸ Versioning).
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: upload
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_PRIVATE_KEY_P8: ${{ secrets.ASC_PRIVATE_KEY_P8 }}
+      TEAM_ID: ${{ secrets.TEAM_ID }}
+      BUNDLE_PREFIX: ${{ secrets.BUNDLE_PREFIX }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the secrets
+        run: |
+          missing=0
+          for name in ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY_P8 TEAM_ID BUNDLE_PREFIX; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repository secret $name is not set (Settings > Secrets and variables > Actions)."
+              missing=1
+            fi
+          done
+          if ! printf '%s' "$TEAM_ID" | grep -Eq '^[A-Z0-9]{10}$'; then
+            echo "::error::TEAM_ID should be 10 capital letters and digits, as shown on developer.apple.com > Membership."
+            missing=1
+          fi
+          if ! printf '%s' "$BUNDLE_PREFIX" | grep -Eq '^[a-z0-9-]+(\.[a-z0-9-]+)+$'; then
+            echo "::error::BUNDLE_PREFIX should look like com.yourname: lowercase, dot-separated, no spaces."
+            missing=1
+          fi
+          exit $missing
+
+      # The README's fork steps, done on the runner's checkout only. Text files only (-I): the test
+      # fixtures hold a binary store that mentions the old prefix and must not be rewritten.
+      - name: Make the identifiers yours
+        run: |
+          grep -rlI -e 'com\.kurtisguy' -e '547DWTTFY6' project.yml Sources Widgets Config scripts \
+            | xargs perl -pi -e 's/com\.kurtisguy/$ENV{BUNDLE_PREFIX}/g; s/547DWTTFY6/$ENV{TEAM_ID}/g'
+          # Universal links for babybuddy.app belong to the original app's team and never verify for
+          # another, and an unverifiable associated domain can hold up provisioning.
+          perl -0pi -e 's/\n\s*com\.apple\.developer\.associated-domains:\n(\s*- applinks:[^\n]*\n)+/\n/' project.yml
+          if grep -rnI -e 'com\.kurtisguy' -e '547DWTTFY6' project.yml Sources Widgets Config scripts \
+            || grep -n 'associated-domains' project.yml; then
+            echo "::error::The original identifiers are still in the files above."
+            exit 1
+          fi
+
+      - uses: ./.github/actions/ios-setup
+
+      - name: Write the API key
+        run: |
+          mkdir -p "$RUNNER_TEMP/asc"
+          printf '%s\n' "$ASC_PRIVATE_KEY_P8" > "$RUNNER_TEMP/asc/AuthKey.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/asc/AuthKey.p8" >> "$GITHUB_ENV"
+
+      # SECRETS_OPTIONAL lets scripts/guard-build.sh pass a Release build with no RevenueCat or
+      # TelemetryDeck keys: a fork's build ships with tips and analytics switched off.
+      - name: Archive
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project BabyBuddy.xcodeproj -scheme BabyBuddy -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/BabyBuddy.xcarchive" \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            SECRETS_OPTIONAL=YES \
+            | tail -n 200
+
+      - name: Upload to TestFlight
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict>
+          </plist>
+          EOF
+          set -o pipefail
+          if ! xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/BabyBuddy.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_KEY_PATH" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tail -n 100; then
+            echo "::error::The upload failed. On a first run this usually means App Store Connect has no app for ${BUNDLE_PREFIX}.BabyBuddy yet: create it (Apps > + > New App, picking that bundle ID), then run this workflow again."
+            exit 1
+          fi
+          echo "::notice::Build ${{ github.run_number }} uploaded. It appears in TestFlight once Apple finishes processing, usually 5 to 30 minutes."
+
+      - name: Remove the API key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/asc"
