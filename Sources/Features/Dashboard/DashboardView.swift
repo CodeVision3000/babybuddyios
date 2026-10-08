@@ -214,6 +214,7 @@ struct DashboardView: View {
             }) { timer in
                 StopTimerSheet(timer: timer,
                                onLog: { kind in stopTimer(timer, as: kind) },
+                               onLogFeed: { side in logFeed(timer, side: side) },
                                onResume: { resumeTimer(timer); stoppingTimer = nil },
                                onDiscard: { discardTimer(timer); stoppingTimer = nil })
             }
@@ -497,7 +498,21 @@ struct DashboardView: View {
                 .accessibilityLabel(timer.stoppedAt.map {
                     "\(timerTitle(timer)) after \(EntityFormatting.spokenDuration($0.timeIntervalSince(timer.timestamp))), started \(started)"
                 } ?? "\(timerTitle(timer)), started \(started)")
-                if timer.stoppedAt == nil {
+                if timer.stoppedAt == nil, let side = timer.feedSide {
+                    // Sides come in pairs: the next tap is usually the other side, which logs
+                    // this one; Done logs this side and ends the feed.
+                    HStack(spacing: 10) {
+                        Button { switchFeedSide(timer, from: side) } label: {
+                            Text("Switch to \(side.other.title.lowercased())")
+                        }
+                        .buttonStyle(.bbPrimary)
+                        Button { finishFeed(timer, side: side) } label: {
+                            Label("Done", systemImage: "stop.fill")
+                        }
+                        .buttonStyle(.bbStop)
+                        .accessibilityLabel("Done feeding")
+                    }
+                } else if timer.stoppedAt == nil {
                     Button { beginStop(timer) } label: {
                         Label("Stop", systemImage: "stop.fill")
                     }
@@ -714,6 +729,32 @@ struct DashboardView: View {
         Task { await sync.sync() }
         Task { await liveActivity.reconcile() } // end the Live Activity for the stopped timer
         stoppingTimer = nil
+    }
+
+    /// File a stopped feeding timer as a breastfeed on `side`, with no editor.
+    private func logFeed(_ timer: LocalEntity, side: FeedSide) {
+        LocalRepository(context: context).finishFeeding(timer, side: side)
+        Analytics.timerStopped(activity: TimerActivity.feeding.rawValue, source: .app)
+        Task { await sync.sync() }
+        Task { await liveActivity.reconcile() }
+        stoppingTimer = nil
+    }
+
+    /// Log the side `timer` is timing and start the other one.
+    private func switchFeedSide(_ timer: LocalEntity, from side: FeedSide) {
+        LocalRepository(context: context).startFeedSide(side.other, childID: timer.childID)
+        Analytics.timerStopped(activity: TimerActivity.feeding.rawValue, source: .app)
+        Analytics.timerStarted(activity: TimerActivity.feeding.rawValue, source: .app)
+        Task { await sync.sync() }
+        Task { await liveActivity.reconcile() }
+    }
+
+    /// Log the side `timer` is timing and end the feed.
+    private func finishFeed(_ timer: LocalEntity, side: FeedSide) {
+        LocalRepository(context: context).finishFeeding(timer, side: side)
+        Analytics.timerStopped(activity: TimerActivity.feeding.rawValue, source: .app)
+        Task { await sync.sync() }
+        Task { await liveActivity.reconcile() }
     }
 
     /// Discard a stopped timer without logging anything.

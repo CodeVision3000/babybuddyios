@@ -11,7 +11,7 @@ struct BabyBuddyApp: App {
     @State private var purchases: PurchaseManager
     @State private var lock = AppLockManager()
     @State private var router: DeepLinkRouter
-    @State private var liveActivity = LiveActivityManager()
+    @State private var liveActivity: LiveActivityManager
     @State private var icons = AppIconManager()
     @Environment(\.scenePhase) private var scenePhase
     private let container: ModelContainer
@@ -53,6 +53,11 @@ struct BabyBuddyApp: App {
         }
         let router = DeepLinkRouter()
         _router = State(initialValue: router)
+        let liveActivity = LiveActivityManager()
+        _liveActivity = State(initialValue: liveActivity)
+        // The feed intents run in this process (they're `LiveActivityIntent`s), so they can bring
+        // the banner up for the side they just started.
+        FeedFinisher.reconcileLiveActivity = { await liveActivity.reconcile() }
         timerAlerts = TimerAlertDelegate(router: router)
         UNUserNotificationCenter.current().delegate = timerAlerts
         let session = AppSession(context: container.mainContext)
@@ -76,6 +81,9 @@ struct BabyBuddyApp: App {
                 .environment(icons)
                 .modelContainer(container)
                 .onOpenURL { router.handle($0) }
+                // The feed's hour-long backup: close a forgotten side the moment it's due while
+                // the app is up. Foreground and background refresh run it too, below.
+                .task { await closeFeedsWhenDue() }
                 // Signing out clears the cache the banner is drawn from — reconcile so a timer's
                 // Live Activity doesn't outlive the data behind it.
                 .onChange(of: session.isAuthenticated) { _, _ in
@@ -86,6 +94,7 @@ struct BabyBuddyApp: App {
             switch phase {
             case .active:
                 lock.willEnterForeground()
+                closeDueFeeds()
                 if session.isAuthenticated && !lock.isLocked { Task { await sync.sync() } }
                 // Sync the Live Activity to the current running timer — covers timers started or
                 // stopped from the widget/Siri, whose extension-process intents can't touch it.
@@ -99,8 +108,28 @@ struct BabyBuddyApp: App {
             }
         }
         .backgroundTask(.appRefresh(Self.refreshTaskID)) {
+            await MainActor.run { _ = LocalRepository(context: container.mainContext).autoCloseFeeds() }
             await sync.sync()
             await MainActor.run { scheduleBackgroundSync() }
+        }
+    }
+
+    /// Log every feed past its hour (``LocalRepository/autoCloseFeeds(now:)``), then sync it and
+    /// drop its banner.
+    private func closeDueFeeds() {
+        guard !LocalRepository(context: container.mainContext).autoCloseFeeds().isEmpty else { return }
+        Task { await sync.sync() }
+        Task { await liveActivity.reconcile() }
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    /// Closes feeds as they come due for as long as the app runs: sleeps until the next running
+    /// feed's hour is up (checking at least every 30 seconds, for a feed started elsewhere).
+    private func closeFeedsWhenDue() async {
+        while !Task.isCancelled {
+            closeDueFeeds()
+            let next = LocalRepository.nextFeedAutoClose(in: container.mainContext)?.timeIntervalSinceNow ?? 30
+            try? await Task.sleep(for: .seconds(min(max(next, 1), 30)))
         }
     }
 

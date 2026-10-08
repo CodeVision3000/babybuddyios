@@ -24,9 +24,21 @@ final class LiveActivityTests: XCTestCase {
         XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .tummyTime), .log(localID: "A"))
     }
 
+    /// A feed needs only its side, so it gets side buttons instead of the form.
+    func testStopRouteOffersSidesForFeeding() {
+        XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .feeding), .feedSide(localID: "A"))
+    }
+
+    /// A feed timed on a side switches to the other side or finishes on its own.
+    func testStopRoutePairsASidedFeed() {
+        XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .feeding, side: .left),
+                       .feedPair(localID: "A", side: .left))
+        XCTAssertNil(TimerStopRoute.feedPair(localID: "A", side: .left).deepLink)
+        // A side only means something on a feed.
+        XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .sleep, side: .left), .log(localID: "A"))
+    }
+
     func testStopRouteOpensFormForFieldActivities() {
-        XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .feeding),
-                       .convertForm(localID: "A", kind: .feeding))
         XCTAssertEqual(TimerStopRoute.resolve(localID: "A", activity: .pumping),
                        .convertForm(localID: "A", kind: .pumping))
     }
@@ -37,6 +49,7 @@ final class LiveActivityTests: XCTestCase {
 
     func testStopRouteDeepLinks() {
         XCTAssertNil(TimerStopRoute.log(localID: "A").deepLink) // in-process intent, no app launch
+        XCTAssertNil(TimerStopRoute.feedSide(localID: "A").deepLink)
         XCTAssertEqual(TimerStopRoute.convertForm(localID: "A", kind: .feeding).deepLink,
                        URL(string: "babybuddy://convert/A/feeding"))
         XCTAssertEqual(TimerStopRoute.openActions(localID: "A").deepLink,

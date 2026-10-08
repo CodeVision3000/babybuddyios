@@ -15,7 +15,11 @@ enum QuickLogAction: String, AppEnum, CaseIterable {
     static var typeDisplayRepresentation: TypeDisplayRepresentation { "Quick Log" }
 
     static var caseDisplayRepresentations: [QuickLogAction: DisplayRepresentation] {
-        [.wetDiaper: "Wet", .solidDiaper: "Solid", .wetAndSolidDiaper: "Wet + Solid",
+        // Synonyms are what people say to Siri: "log a dirty diaper", "log both".
+        [.wetDiaper: DisplayRepresentation(title: "Wet", synonyms: ["pee", "wet diaper"]),
+         .solidDiaper: DisplayRepresentation(title: "Solid", synonyms: ["dirty", "poop", "poopy"]),
+         .wetAndSolidDiaper: DisplayRepresentation(
+            title: "Wet + Solid", synonyms: ["both", "wet and solid", "wet and dirty"]),
          .quickFeed: "Feeding"]
     }
 

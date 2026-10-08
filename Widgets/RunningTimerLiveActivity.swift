@@ -5,8 +5,9 @@ import WidgetKit
 
 /// Live Activity for a running timer: a Lock Screen banner and the Dynamic Island. Mirrors the
 /// Active Timer widget's content (icon + name + self-ticking elapsed via `Text(_, style: .timer)`,
-/// per-activity tint) and its Stop behavior (``TimerStopRoute``): sleep/tummy log in one tap;
-/// feeding/pumping open the convert form; an uncategorized timer opens its generic actions.
+/// per-activity tint) and its Stop behavior (``TimerStopRoute``): sleep/tummy log in one tap; a
+/// feed logs from its Left / Right / Both buttons; pumping opens the convert form; an
+/// uncategorized timer opens its generic actions.
 /// Tapping the body opens the app to that timer (`babybuddy://timer/<localID>`).
 ///
 /// Hosted by the widget extension. The app owns the activity's lifecycle (see
@@ -36,7 +37,7 @@ struct RunningTimerLiveActivity: Widget {
                         .foregroundStyle(BBColor.success)
                 }
                 DynamicIslandExpandedRegion(.center) {
-                    Text(context.state.start, style: .timer)
+                    TimerElapsedText(start: context.state.start, isFeed: FeedSide(timerName: context.state.timerName) != nil)
                         .font(.system(size: 34, weight: .medium, design: .rounded))
                         .monospacedDigit()
                         .lineLimit(1)
@@ -49,7 +50,7 @@ struct RunningTimerLiveActivity: Widget {
             } compactLeading: {
                 Image(systemName: icon).foregroundStyle(tint)
             } compactTrailing: {
-                Text(context.state.start, style: .timer)
+                TimerElapsedText(start: context.state.start, isFeed: FeedSide(timerName: context.state.timerName) != nil)
                     .monospacedDigit()
                     .foregroundStyle(tint)
                     .frame(maxWidth: 44)
@@ -66,36 +67,41 @@ struct RunningTimerLiveActivity: Widget {
     @ViewBuilder
     private func lockScreen(_ context: ActivityViewContext<RunningTimerAttributes>) -> some View {
         let tint = context.state.activity.map(BBColor.tint(for:)) ?? BBColor.brand
+        let isFeed = context.state.activity == .feeding
         HStack(spacing: 0) {
             // Accent rail: the activity tint down the leading edge.
             Rectangle()
                 .fill(tint)
                 .frame(width: 4)
-            HStack(spacing: 11) {
-                // Tinted glyph tile — the activity icon over the app's ActivityTile-style wash.
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(tint.opacity(0.2))
-                    .frame(width: 38, height: 38)
-                    .overlay {
-                        Image(systemName: context.state.activity?.systemImage ?? "timer")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(tint)
-                    }
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(context.state.title)
-                            .font(.system(size: 14, weight: .medium))
+            VStack(spacing: 10) {
+                HStack(spacing: 11) {
+                    // Tinted glyph tile — the activity icon over the app's ActivityTile-style wash.
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(tint.opacity(0.2))
+                        .frame(width: 38, height: 38)
+                        .overlay {
+                            Image(systemName: context.state.activity?.systemImage ?? "timer")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(tint)
+                        }
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(context.state.title)
+                                .font(.system(size: 14, weight: .medium))
+                                .lineLimit(1)
+                            Circle().fill(BBColor.success).frame(width: 7, height: 7) // running
+                        }
+                        TimerElapsedText(start: context.state.start, isFeed: FeedSide(timerName: context.state.timerName) != nil)
+                            .font(.system(size: 30, weight: .medium, design: .rounded))
+                            .monospacedDigit()
                             .lineLimit(1)
-                        Circle().fill(BBColor.success).frame(width: 7, height: 7) // running
+                            .minimumScaleFactor(0.6)
                     }
-                    Text(context.state.start, style: .timer)
-                        .font(.system(size: 30, weight: .medium, design: .rounded))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                    Spacer(minLength: 8)
+                    // A feed's three side buttons don't fit the Stop slot, so they get their own row.
+                    if !isFeed { stopControl(context).frame(width: 92) }
                 }
-                Spacer(minLength: 8)
-                stopControl(context).frame(width: 92)
+                if isFeed { stopControl(context) }
             }
             .padding(14)
         }
@@ -107,11 +113,16 @@ struct RunningTimerLiveActivity: Widget {
     @ViewBuilder
     private func stopControl(_ context: ActivityViewContext<RunningTimerAttributes>) -> some View {
         let route = TimerStopRoute.resolve(localID: context.attributes.timerLocalID,
-                                           activity: context.state.activity)
+                                           activity: context.state.activity,
+                                           side: FeedSide(timerName: context.state.timerName))
         switch route {
         case .log(let id):
             Button(intent: LogTimerIntent(timerLocalID: id)) { stopLabel }
                 .buttonStyle(.plain)
+        case .feedSide(let id):
+            FeedSideButtons(timerLocalID: id)
+        case .feedPair(let id, let side):
+            FeedPairButtons(timerLocalID: id, side: side)
         case .convertForm, .openActions:
             Link(destination: route.deepLink!) { stopLabel }
         }

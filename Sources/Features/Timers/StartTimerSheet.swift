@@ -93,8 +93,20 @@ struct StartTimerSheet: View {
 
     private var startBar: some View {
         VStack(spacing: 6) {
-            Button { start(kind: selected) } label: { Text(startTitle) }
-                .buttonStyle(startStyle)
+            if selected == .feeding {
+                // A feed is timed one side at a time; the other side then logs this one.
+                Text("Next: \(nextSide.title)")
+                    .font(.footnote).foregroundStyle(.secondary)
+                HStack(spacing: 8) {
+                    ForEach(FeedSide.timedSides, id: \.self) { side in
+                        Button { startFeed(side) } label: { Text("Start \(side.title.lowercased())") }
+                            .buttonStyle(startStyle)
+                    }
+                }
+            } else {
+                Button { start(kind: selected) } label: { Text(startTitle) }
+                    .buttonStyle(startStyle)
+            }
 
             // Lower-emphasis escape hatch: once an activity is picked, still allow an
             // uncategorized timer (with none picked, the primary button already does this).
@@ -126,6 +138,19 @@ struct StartTimerSheet: View {
 
     private func startDate(now: Date = .now) -> Date {
         minutesBack.map { now.addingTimeInterval(-Double($0) * 60) } ?? customStart
+    }
+
+    /// The side due next: the other one from a feed running now, else from the last one logged.
+    private var nextSide: FeedSide { LocalRepository.nextFeedSide(childID: childID, in: context) }
+
+    /// Start timing a feed on `side`, logging the other side if it's running. The start chips
+    /// back-date it like any timer; a custom name gives way to the side's ("Feeding · Left").
+    private func startFeed(_ side: FeedSide) {
+        LocalRepository(context: context).startFeedSide(side, childID: childID, at: startDate())
+        Analytics.timerStarted(activity: TimerActivity.feeding.rawValue, source: .app)
+        Task { await sync.sync() }
+        Task { await liveActivity.reconcile() }
+        dismiss()
     }
 
     private func start(kind: EntityKind?) {

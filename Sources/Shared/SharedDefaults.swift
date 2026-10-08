@@ -12,6 +12,7 @@ enum SharedDefaults {
     private static let quickFeedTypeKey = "quickFeedType"
     private static let quickFeedMethodKey = "quickFeedMethod"
     private static let lastSyncDateKey = "lastSyncDate"
+    private static let lastFeedSideKey = "lastFeedSide"
     static let stalenessThresholdKey = "stalenessThresholdMinutes"
 
     /// Whether the customer has tipped at least once. Written by the app (from ``PurchaseManager``)
@@ -33,6 +34,12 @@ enum SharedDefaults {
         }
     }
 
+    /// ``selectedChildID`` when it names a real child: the Settings picker stores 0 for none, and a
+    /// record sent with child 0 is rejected by the server.
+    static var validChildID: Int? {
+        selectedChildID.flatMap { $0 > 0 ? $0 : nil }
+    }
+
     /// The feeding type/method the Quick Log widget's one-tap "Feeding" tile logs. Edited in the
     /// app's Settings and read here by the widget's App Intent across the process boundary, so a
     /// tap always records the customer's current default. Default to breast milk / both breasts.
@@ -45,6 +52,14 @@ enum SharedDefaults {
     static var quickFeedMethod: FeedingMethod {
         get { suite.string(forKey: quickFeedMethodKey).flatMap(FeedingMethod.init(rawValue:)) ?? .bothBreasts }
         set { suite.set(newValue.rawValue, forKey: quickFeedMethodKey) }
+    }
+
+    /// The side the last feed finished with a side button ended on, wherever it was tapped (the app,
+    /// a widget, the Live Activity, Siri). Shown as "Last: Left" so the next feed can start on the
+    /// other side. `nil` until the first side finish.
+    static var lastFeedSide: FeedSide? {
+        get { suite.string(forKey: lastFeedSideKey).flatMap(FeedSide.init(rawValue:)) }
+        set { suite.set(newValue?.rawValue, forKey: lastFeedSideKey) }
     }
 
     /// Whether a running timer is shown as a Live Activity / Dynamic Island. Defaults to on;

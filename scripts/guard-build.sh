@@ -8,7 +8,9 @@
 # 2. A Release build on that team must carry every build-time secret. They come from
 #    Config/Secrets.xcconfig, which is gitignored, and BabyBuddy.xcconfig includes it with
 #    `#include?`, so a missing file used to pass silently: 1.1.0 shipped with no RevenueCat key
-#    and no analytics. Debug builds, CI and forks are not held to this.
+#    and no analytics. Debug builds, CI and forks are not held to this, and neither is a build that
+#    sets SECRETS_OPTIONAL=YES: a fork's TestFlight build (.github/workflows/testflight.yml) runs
+#    on its own team with tips and analytics switched off.
 set -u
 EXPECTED_TEAM="547DWTTFY6"
 status=0
@@ -18,7 +20,8 @@ if [ "${DEVELOPMENT_TEAM:-}" != "$EXPECTED_TEAM" ]; then
   status=1
 fi
 
-if [ "${CONFIGURATION:-}" = "Release" ] && [ "${DEVELOPMENT_TEAM:-}" = "$EXPECTED_TEAM" ]; then
+if [ "${CONFIGURATION:-}" = "Release" ] && [ "${DEVELOPMENT_TEAM:-}" = "$EXPECTED_TEAM" ] \
+  && [ "${SECRETS_OPTIONAL:-}" != "YES" ]; then
   for key in REVENUECAT_API_KEY TELEMETRYDECK_APP_ID TELEMETRYDECK_SALT; do
     eval "value=\${$key:-}"
     if [ -z "$value" ]; then

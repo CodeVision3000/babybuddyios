@@ -15,6 +15,11 @@ enum TimerActivity: String, AppEnum, CaseIterable {
     /// Best-effort match of an existing timer's name back to an activity, for icon/tint in the
     /// Active Timer widget. Returns `nil` for custom-named timers (shown with a generic icon).
     init?(timerName: String) {
+        // A feed timed on a side is named for it, "Feeding · Left".
+        if FeedSide(timerName: timerName) != nil {
+            self = .feeding
+            return
+        }
         guard let match = TimerActivity.allCases.first(where: { $0.timerName == timerName })
         else { return nil }
         self = match

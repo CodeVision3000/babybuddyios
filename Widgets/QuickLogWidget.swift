@@ -4,7 +4,8 @@ import AppIntents
 
 /// Home-screen widget: a stack of diaper tiles that each log a complete diaper change (Wet /
 /// Solid / Wet + Solid) with one tap, via ``QuickLogIntent`` — no timer, no form. Static
-/// content, so it's always useful. Mirrors ``QuickStartWidget``.
+/// content, so it's always useful. Mirrors ``QuickStartWidget``. The Lock Screen rectangle keeps
+/// just the three diaper buttons.
 struct QuickLogWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "BabyBuddyQuickLog", provider: QuickLogProvider()) { entry in
@@ -13,7 +14,7 @@ struct QuickLogWidget: Widget {
         }
         .configurationDisplayName("Quick log")
         .description("Log a diaper change or feeding with one tap.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .accessoryRectangular])
     }
 }
 
@@ -34,6 +35,7 @@ struct QuickLogProvider: TimelineProvider {
 }
 
 struct QuickLogView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: QuickLogEntry
 
     /// The tiles shown, in order. Explicit (not `allCases`) so the widget's composition is
@@ -42,7 +44,32 @@ struct QuickLogView: View {
     private let actions: [QuickLogAction] = [.wetDiaper, .solidDiaper, .wetAndSolidDiaper, .quickFeed]
 
     var body: some View {
-        panel
+        if family == .accessoryRectangular { accessory } else { panel }
+    }
+
+    /// Lock Screen: a title line over the three diaper buttons, in the system's accessory styling.
+    private var accessory: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label("Diaper", systemImage: EntityKind.change.systemImage)
+                .font(.headline)
+                .widgetAccentable()
+            HStack(spacing: 4) {
+                ForEach([QuickLogAction.wetDiaper, .solidDiaper, .wetAndSolidDiaper], id: \.self) { action in
+                    Button(intent: QuickLogIntent(action: action)) {
+                        Text(action == .wetAndSolidDiaper ? "Both" : action.title)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 4)
+                            .background(.quaternary, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Log \(action.title.lowercased()) diaper")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var panel: some View {
